@@ -1,0 +1,20 @@
+{
+  "name": "nyu-bookstore-finder",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shraysharma07/nyu-bookstore-finder.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/shraysharma07/nyu-bookstore-finder/issues"
+  },
+  "homepage": "https://github.com/shraysharma07/nyu-bookstore-finder#readme"
+}

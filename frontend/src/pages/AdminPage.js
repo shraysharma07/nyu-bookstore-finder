@@ -1,9 +1,12 @@
+// frontend/src/pages/AdminPage.js
 import React, { useState } from 'react';
 import AddBookForm from '../components/AddBookForm';
 import InventoryTable from '../components/InventoryTable';
+import CatalogUploader from '../components/CatalogUploader';
 
 const AdminPage = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('inventory');
+  const [catalogData, setCatalogData] = useState(null);
   const [inventory, setInventory] = useState([
     // Demo inventory - your roommate will load this from database
     {
@@ -29,6 +32,7 @@ const AdminPage = ({ user, onLogout }) => {
   ]);
 
   const handleAddBook = (newBook) => {
+    // Add the new book to inventory
     const book = {
       ...newBook,
       id: Date.now(),
@@ -45,6 +49,11 @@ const AdminPage = ({ user, onLogout }) => {
     setInventory(inventory.map(book => 
       book.id === updatedBook.id ? updatedBook : book
     ));
+  };
+
+  const handleCatalogData = (data) => {
+    setCatalogData(data);
+    console.log('Catalog data imported:', data);
   };
 
   const tabStyle = (isActive) => ({
@@ -125,35 +134,39 @@ const AdminPage = ({ user, onLogout }) => {
     </div>
   );
 
-  const AnalyticsIcon = ({ isActive }) => (
+  const UploadIcon = ({ isActive }) => (
     <div style={{
       width: '16px',
       height: '16px',
       position: 'relative'
     }}>
       <div style={{
-        width: '3px',
+        width: '12px',
         height: '8px',
-        background: isActive ? 'white' : '#6b7280',
+        border: `2px solid ${isActive ? 'white' : '#6b7280'}`,
+        borderRadius: '2px 2px 0 0',
+        borderBottom: 'none',
         position: 'absolute',
-        bottom: '2px',
+        top: '6px',
         left: '2px'
       }}></div>
       <div style={{
-        width: '3px',
-        height: '12px',
-        background: isActive ? 'white' : '#6b7280',
-        position: 'absolute',
-        bottom: '2px',
-        left: '6px'
-      }}></div>
-      <div style={{
-        width: '3px',
+        width: '2px',
         height: '6px',
         background: isActive ? 'white' : '#6b7280',
         position: 'absolute',
-        bottom: '2px',
-        left: '10px'
+        top: '1px',
+        left: '7px'
+      }}></div>
+      <div style={{
+        width: '0',
+        height: '0',
+        borderLeft: `3px solid transparent`,
+        borderRight: `3px solid transparent`,
+        borderBottom: `4px solid ${isActive ? 'white' : '#6b7280'}`,
+        position: 'absolute',
+        top: '0',
+        left: '5px'
       }}></div>
     </div>
   );
@@ -271,13 +284,13 @@ const AdminPage = ({ user, onLogout }) => {
               Add New Book
             </button>
             <button
-              style={tabStyle(activeTab === 'analytics')}
-              onClick={() => setActiveTab('analytics')}
-              onMouseOver={(e) => activeTab !== 'analytics' && (e.target.style.background = 'rgba(124, 58, 237, 0.05)')}
-              onMouseOut={(e) => activeTab !== 'analytics' && (e.target.style.background = 'transparent')}
+              style={tabStyle(activeTab === 'catalog')}
+              onClick={() => setActiveTab('catalog')}
+              onMouseOver={(e) => activeTab !== 'catalog' && (e.target.style.background = 'rgba(124, 58, 237, 0.05)')}
+              onMouseOut={(e) => activeTab !== 'catalog' && (e.target.style.background = 'transparent')}
             >
-              <AnalyticsIcon isActive={activeTab === 'analytics'} />
-              Analytics
+              <UploadIcon isActive={activeTab === 'catalog'} />
+              Upload Catalog
             </button>
           </nav>
         </div>
@@ -297,98 +310,8 @@ const AdminPage = ({ user, onLogout }) => {
           <AddBookForm onAddBook={handleAddBook} />
         )}
 
-        {activeTab === 'analytics' && (
-          <div style={{ 
-            background: 'white', 
-            padding: '3rem', 
-            borderRadius: '20px', 
-            textAlign: 'center',
-            boxShadow: '0 10px 25px -3px rgba(0, 0, 0, 0.1)',
-            border: '1px solid #f3f4f6'
-          }}>
-            {/* Analytics placeholder icon */}
-            <div style={{
-              width: '80px',
-              height: '80px',
-              margin: '0 auto 2rem',
-              position: 'relative'
-            }}>
-              <div style={{
-                width: '12px',
-                height: '40px',
-                background: 'linear-gradient(135deg, #e5e7eb, #d1d5db)',
-                position: 'absolute',
-                bottom: '10px',
-                left: '10px'
-              }}></div>
-              <div style={{
-                width: '12px',
-                height: '60px',
-                background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
-                position: 'absolute',
-                bottom: '10px',
-                left: '25px'
-              }}></div>
-              <div style={{
-                width: '12px',
-                height: '30px',
-                background: 'linear-gradient(135deg, #e5e7eb, #d1d5db)',
-                position: 'absolute',
-                bottom: '10px',
-                left: '40px'
-              }}></div>
-              <div style={{
-                width: '12px',
-                height: '50px',
-                background: 'linear-gradient(135deg, #10b981, #059669)',
-                position: 'absolute',
-                bottom: '10px',
-                left: '55px'
-              }}></div>
-            </div>
-            
-            <h2 style={{ 
-              fontSize: '1.8rem', 
-              fontWeight: '700',
-              marginBottom: '1rem',
-              color: '#1f2937'
-            }}>
-              Analytics Coming Soon
-            </h2>
-            <p style={{ 
-              color: '#6b7280', 
-              fontSize: '1.1rem',
-              lineHeight: '1.6',
-              maxWidth: '500px',
-              margin: '0 auto'
-            }}>
-              Track which books students search for most, monitor your inventory performance, 
-              and discover new opportunities to serve NYU Madrid students better.
-            </p>
-            
-            <div style={{
-              marginTop: '2rem',
-              padding: '1.5rem',
-              background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)',
-              borderRadius: '12px',
-              border: '1px solid #e2e8f0'
-            }}>
-              <h3 style={{ 
-                fontSize: '1rem', 
-                fontWeight: '600',
-                color: '#374151',
-                marginBottom: '0.5rem'
-              }}>
-                Features in Development:
-              </h3>
-              <div style={{ color: '#6b7280', fontSize: '0.95rem', textAlign: 'left' }}>
-                <div>• Most searched books by students</div>
-                <div>• Your inventory turnover rates</div>
-                <div>• Popular course materials by semester</div>
-                <div>• Revenue tracking and trends</div>
-              </div>
-            </div>
-          </div>
+        {activeTab === 'catalog' && (
+          <CatalogUploader onDataExtracted={handleCatalogData} />
         )}
       </div>
     </div>

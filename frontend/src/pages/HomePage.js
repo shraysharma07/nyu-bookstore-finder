@@ -47,7 +47,7 @@ const Homepage = () => {
   // Book data mapped to classes
   const classBooks = {
     'MATH-UA 121 - Calculus I': [
-      { title: 'Calculus: Early Transcendentals', author: 'James Stewart', price: 299.99, required: true },
+      { title: 'don quixote', author: 'James Stewart', price: 299.99, required: true },
       { title: 'Student Study Guide for Calculus', author: 'Stewart/Clegg', price: 89.99, required: false }
     ],
     'PHYS-UA 91 - Physics I': [

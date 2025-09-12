@@ -1,82 +1,28 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import BookstoreCard from '../components/BookstoreCard';
+import { csvData } from '../course_catalogue'; // Import your CSV data
 
 const Homepage = () => {
   const [formData, setFormData] = useState({
     name: '',
     dorm: '',
-    class: '',
-    teacher: ''
+    classType: '',
+    teacher: '',
+    class: ''
   });
   const [showBooks, setShowBooks] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [courseData, setCourseData] = useState([]);
+  const [teacherMapping, setTeacherMapping] = useState(new Map());
   const booksRef = useRef(null);
 
-  // Sample data
+  // Dorms data
   const dorms = [
     'Select Dorm',
     'Chamberi',
     'Moncloa',
     'Malasaña'
   ];
-
-  const classes = [
-    'Select Class',
-    'MATH-UA 121 - Calculus I',
-    'PHYS-UA 91 - Physics I',
-    'CHEM-UA 125 - General Chemistry',
-    'ECON-UA 1 - Principles of Microeconomics',
-    'PSYC-UA 1 - Introduction to Psychology',
-    'ENGL-UA 1 - Writing the Essay',
-    'HIST-UA 1 - Global History',
-    'BIOL-UA 11 - Principles of Biology'
-  ];
-
-  // Teachers mapped to classes
-  const classTeachers = {
-    'MATH-UA 121 - Calculus I': ['Dr. Rodriguez', 'Prof. Martinez', 'Dr. Lopez'],
-    'PHYS-UA 91 - Physics I': ['Dr. Garcia', 'Prof. Fernandez', 'Dr. Sanchez'],
-    'CHEM-UA 125 - General Chemistry': ['Dr. Morales', 'Prof. Jimenez', 'Dr. Herrera'],
-    'ECON-UA 1 - Principles of Microeconomics': ['Dr. Castro', 'Prof. Vargas', 'Dr. Ruiz'],
-    'PSYC-UA 1 - Introduction to Psychology': ['Dr. Mendoza', 'Prof. Ortega', 'Dr. Silva'],
-    'ENGL-UA 1 - Writing the Essay': ['Dr. Thompson', 'Prof. Wilson', 'Dr. Anderson'],
-    'HIST-UA 1 - Global History': ['Dr. Gutierrez', 'Prof. Romero', 'Dr. Torres'],
-    'BIOL-UA 11 - Principles of Biology': ['Dr. Navarro', 'Prof. Delgado', 'Dr. Moreno']
-  };
-
-  // Book data mapped to classes
-  const classBooks = {
-    'MATH-UA 121 - Calculus I': [
-      { title: 'don quixote', author: 'James Stewart', price: 299.99, required: true },
-      { title: 'Student Study Guide for Calculus', author: 'Stewart/Clegg', price: 89.99, required: false }
-    ],
-    'PHYS-UA 91 - Physics I': [
-      { title: 'University Physics with Modern Physics', author: 'Young & Freedman', price: 349.99, required: true },
-      { title: 'Physics Lab Manual', author: 'NYU Physics Dept', price: 45.00, required: true }
-    ],
-    'CHEM-UA 125 - General Chemistry': [
-      { title: 'Chemistry: The Central Science', author: 'Brown, LeMay, Bursten', price: 389.99, required: true },
-      { title: 'Chemistry Lab Safety Manual', author: 'NYU Chemistry', price: 25.00, required: true }
-    ],
-    'ECON-UA 1 - Principles of Microeconomics': [
-      { title: 'Principles of Economics', author: 'N. Gregory Mankiw', price: 279.99, required: true },
-      { title: 'Study Guide for Principles of Economics', author: 'Mankiw Study Group', price: 79.99, required: false }
-    ],
-    'PSYC-UA 1 - Introduction to Psychology': [
-      { title: 'Psychology: The Science of Mind and Behaviour', author: 'Passer & Smith', price: 319.99, required: true }
-    ],
-    'ENGL-UA 1 - Writing the Essay': [
-      { title: 'The Norton Field Guide to Writing', author: 'Richard Bullock', price: 129.99, required: true },
-      { title: 'They Say / I Say', author: 'Graff & Birkenstein', price: 89.99, required: true }
-    ],
-    'HIST-UA 1 - Global History': [
-      { title: 'A History of World Societies', author: 'McKay, Hill, Buckler', price: 399.99, required: true }
-    ],
-    'BIOL-UA 11 - Principles of Biology': [
-      { title: 'Campbell Biology', author: 'Urry, Cain, Wasserman', price: 459.99, required: true },
-      { title: 'Biology Lab Manual', author: 'NYU Biology Dept', price: 65.00, required: true }
-    ]
-  };
 
   // Bookstores mapped to dorms
   const dormBookstores = {
@@ -130,6 +76,143 @@ const Homepage = () => {
     ]
   };
 
+  // Load and parse CSV data on component mount
+  useEffect(() => {
+    // Parse the imported CSV data directly
+    parseCSVData(csvData);
+  }, []);
+
+  // CSV parsing functions
+  const parseCSVLine = (line) => {
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        values.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    values.push(current);
+    return values;
+  };
+
+  const parseCSVData = (csvText) => {
+    const lines = csvText.trim().split('\n');
+    const headers = lines[0].split(',').map(h => h.trim());
+    
+    const data = lines.slice(1)
+      .filter(line => line.trim())
+      .map(line => {
+        const values = parseCSVLine(line);
+        const row = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index] ? values[index].trim().replace(/"/g, '') : '';
+        });
+        return row;
+      })
+      .filter(row => row.Teacher); // Only filter by teacher, not by title (to include classes with no books)
+      
+    setCourseData(data);
+    processTeacherNames(data);
+  };
+
+  const parseTeacherName = (teacherString) => {
+    if (!teacherString) return [];
+    
+    // Remove numbers at the end (like "1", "2", etc.)
+    let cleaned = teacherString.replace(/\d+$/, '');
+    
+    // Split by various separators
+    const separators = ['/', '&', ',', ' and ', ' & '];
+    let teachers = [cleaned];
+    
+    separators.forEach(separator => {
+      const newTeachers = [];
+      teachers.forEach(teacher => {
+        if (teacher.includes(separator)) {
+          newTeachers.push(...teacher.split(separator).map(t => t.trim()));
+        } else {
+          newTeachers.push(teacher);
+        }
+      });
+      teachers = newTeachers;
+    });
+    
+    // Filter out empty strings and return unique names
+    return [...new Set(teachers.filter(name => name.trim().length > 0))];
+  };
+
+  const processTeacherNames = (data) => {
+    const mapping = new Map();
+    
+    data.forEach(row => {
+      const originalTeacher = row.Teacher;
+      const individualTeachers = parseTeacherName(originalTeacher);
+      
+      individualTeachers.forEach(teacherName => {
+        if (!mapping.has(teacherName)) {
+          mapping.set(teacherName, []);
+        }
+        // Store the original row with the individual teacher name
+        const newRow = { ...row, IndividualTeacher: teacherName };
+        mapping.get(teacherName).push(newRow);
+      });
+    });
+    
+    setTeacherMapping(mapping);
+  };
+
+  // Get available class types
+  const getClassTypes = () => {
+    const types = [...new Set(courseData.map(row => row['Type of Class']).filter(Boolean))];
+    return ['Select Course Type', ...types];
+  };
+
+  // Get available teachers based on selected class type
+  const getAvailableTeachers = () => {
+    if (!formData.classType || formData.classType === 'Select Course Type') {
+      return ['Select Teacher'];
+    }
+    
+    const teachersForType = new Set();
+    Array.from(teacherMapping.entries()).forEach(([teacherName, courses]) => {
+      const hasTypeMatch = courses.some(course => course['Type of Class'] === formData.classType);
+      if (hasTypeMatch) {
+        teachersForType.add(teacherName);
+      }
+    });
+    
+    const sortedTeachers = Array.from(teachersForType).sort();
+    return ['Select Teacher', ...sortedTeachers];
+  };
+
+  // Get available classes based on selected class type and teacher
+  const getAvailableClasses = () => {
+    if (!formData.classType || !formData.teacher || formData.teacher === 'Select Teacher') {
+      return ['Select Class'];
+    }
+    
+    if (teacherMapping.has(formData.teacher)) {
+      const teacherCourses = teacherMapping.get(formData.teacher);
+      const classesForTeacher = teacherCourses
+        .filter(course => course['Type of Class'] === formData.classType)
+        .map(course => course['Class Title'])
+        .filter(Boolean);
+      
+      const uniqueClasses = [...new Set(classesForTeacher)].sort();
+      return ['Select Class', ...uniqueClasses];
+    }
+    
+    return ['Select Class'];
+  };
+
   const handleInputChange = (field, value) => {
     setFormData(prev => {
       const newData = {
@@ -137,25 +220,20 @@ const Homepage = () => {
         [field]: value
       };
       
-      // If class changes, reset teacher selection
-      if (field === 'class') {
+      // Reset dependent fields when parent fields change
+      if (field === 'classType') {
         newData.teacher = '';
+        newData.class = '';
+      } else if (field === 'teacher') {
+        newData.class = '';
       }
       
       return newData;
     });
   };
 
-  // Get available teachers based on selected class
-  const getAvailableTeachers = () => {
-    if (!formData.class || formData.class === 'Select Class') {
-      return ['Select Teacher'];
-    }
-    return ['Select Teacher', ...classTeachers[formData.class]];
-  };
-
   const handleFindBooks = async () => {
-    if (!formData.name || !formData.dorm || !formData.class || !formData.teacher) {
+    if (!formData.name || !formData.dorm || !formData.classType || !formData.teacher || !formData.class) {
       alert('Please fill in all fields');
       return;
     }
@@ -175,7 +253,53 @@ const Homepage = () => {
   };
 
   const getBooksForClass = () => {
-    return classBooks[formData.class] || [];
+    if (!formData.teacher || !formData.class || !teacherMapping.has(formData.teacher)) {
+      return [];
+    }
+    
+    const filteredBooks = teacherMapping.get(formData.teacher).filter(course =>
+      course['Type of Class'] === formData.classType &&
+      course['Class Title'] === formData.class
+    );
+    
+    return filteredBooks;
+  };
+
+  const getDigitalBooks = () => {
+    const books = getBooksForClass();
+    return books.filter(book => 
+      // Check if it's digital based on multiple criteria
+      (book['Digital?'] && book['Digital?'].startsWith('http')) || // Has a URL in Digital column
+      (book.Notes && book.Notes.toLowerCase().includes('brightspace')) ||
+      (book.Notes && book.Notes.toLowerCase().includes('brightspacce')) ||// Notes mention Brightspace
+      (book['First year/Notes'] && book['First year/Notes'].startsWith('http')) // URL in last column
+    );
+  };
+
+  const getPhysicalBooks = () => {
+    const books = getBooksForClass();
+    return books.filter(book => 
+      // Physical books are those that are NOT digital
+      !(
+        (book['Digital?'] && book['Digital?'].startsWith('http')) || 
+        (book.Notes && book.Notes.toLowerCase().includes('brightspace')) ||
+        (book.Notes && book.Notes.toLowerCase().includes('brightspacce')) ||
+        (book['First year/Notes'] && book['First year/Notes'].startsWith('http'))
+      ) &&
+      // AND have actual book information (not empty rows)
+      book.Title && book.Title.trim() !== ''
+    );
+  };
+
+  const hasNoBooks = () => {
+    const books = getBooksForClass();
+    if (books.length === 0) return true;
+    
+    // Check if all books in the class are empty (no title, author, etc.)
+    return books.every(book => 
+      (!book.Title || book.Title.trim() === '') &&
+      (!book.Author || book.Author.trim() === '')
+    );
   };
 
   const getBookstoresForDorm = () => {
@@ -200,18 +324,12 @@ const Homepage = () => {
           opacity: '0.15'
         }}>
           <svg width="60" height="80" viewBox="0 0 60 80" fill="none">
-            {/* Torch flame */}
             <ellipse cx="30" cy="20" rx="15" ry="25" fill="url(#flame1)" />
             <ellipse cx="30" cy="22" rx="10" ry="18" fill="url(#flame2)" />
             <ellipse cx="30" cy="25" rx="6" ry="12" fill="url(#flame3)" />
-            
-            {/* Torch handle */}
             <rect x="26" y="40" width="8" height="35" fill="#8B4513" rx="2" />
             <rect x="24" y="38" width="12" height="6" fill="#A0522D" rx="3" />
-            
-            {/* Torch bowl */}
             <path d="M20 35 C20 32 25 30 30 30 C35 30 40 32 40 35 L38 42 L22 42 Z" fill="#CD853F" />
-            
             <defs>
               <radialGradient id="flame1">
                 <stop offset="0%" stopColor="#FFD700" />
@@ -367,8 +485,8 @@ const Homepage = () => {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
-              {/* Class Dropdown */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+              {/* Course Type Dropdown */}
               <div>
                 <label style={{ 
                   display: 'block', 
@@ -377,11 +495,11 @@ const Homepage = () => {
                   color: '#374151',
                   marginBottom: '0.5rem'
                 }}>
-                  Course
+                  Course Type
                 </label>
                 <select
-                  value={formData.class}
-                  onChange={(e) => handleInputChange('class', e.target.value)}
+                  value={formData.classType}
+                  onChange={(e) => handleInputChange('classType', e.target.value)}
                   style={{
                     width: '100%',
                     padding: '0.75rem',
@@ -394,9 +512,9 @@ const Homepage = () => {
                   onFocus={(e) => e.target.style.borderColor = '#7c3aed'}
                   onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
                 >
-                  {classes.map(cls => (
-                    <option key={cls} value={cls === 'Select Class' ? '' : cls}>
-                      {cls}
+                  {getClassTypes().map(type => (
+                    <option key={type} value={type === 'Select Course Type' ? '' : type}>
+                      {type}
                     </option>
                   ))}
                 </select>
@@ -416,16 +534,16 @@ const Homepage = () => {
                 <select
                   value={formData.teacher}
                   onChange={(e) => handleInputChange('teacher', e.target.value)}
-                  disabled={!formData.class || formData.class === 'Select Class'}
+                  disabled={!formData.classType}
                   style={{
                     width: '100%',
                     padding: '0.75rem',
                     border: '2px solid #e5e7eb',
                     borderRadius: '8px',
                     fontSize: '1rem',
-                    backgroundColor: (!formData.class || formData.class === 'Select Class') ? '#f9fafb' : 'white',
+                    backgroundColor: !formData.classType ? '#f9fafb' : 'white',
                     outline: 'none',
-                    cursor: (!formData.class || formData.class === 'Select Class') ? 'not-allowed' : 'pointer'
+                    cursor: !formData.classType ? 'not-allowed' : 'pointer'
                   }}
                   onFocus={(e) => e.target.style.borderColor = '#7c3aed'}
                   onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
@@ -433,6 +551,42 @@ const Homepage = () => {
                   {getAvailableTeachers().map(teacher => (
                     <option key={teacher} value={teacher === 'Select Teacher' ? '' : teacher}>
                       {teacher}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Class Dropdown */}
+              <div>
+                <label style={{ 
+                  display: 'block', 
+                  fontSize: '0.9rem', 
+                  fontWeight: '600', 
+                  color: '#374151',
+                  marginBottom: '0.5rem'
+                }}>
+                  Class
+                </label>
+                <select
+                  value={formData.class}
+                  onChange={(e) => handleInputChange('class', e.target.value)}
+                  disabled={!formData.teacher}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    backgroundColor: !formData.teacher ? '#f9fafb' : 'white',
+                    outline: 'none',
+                    cursor: !formData.teacher ? 'not-allowed' : 'pointer'
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = '#7c3aed'}
+                  onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
+                >
+                  {getAvailableClasses().map(cls => (
+                    <option key={cls} value={cls === 'Select Class' ? '' : cls}>
+                      {cls}
                     </option>
                   ))}
                 </select>
@@ -512,90 +666,262 @@ const Homepage = () => {
                 color: '#059669',
                 marginBottom: '0.5rem'
               }}>
-                Books Required for {formData.class}
+                Books for {formData.class}
               </h3>
               <p style={{ fontSize: '1.1rem', color: '#6b7280' }}>
                 Hello {formData.name}! Here are your books and nearby stores:
               </p>
             </div>
 
-            {/* For each book, show bookstore cards */}
-            {getBooksForClass().map((book, bookIndex) => (
-              <div key={bookIndex} style={{ marginBottom: '4rem' }}>
-                <div style={{ 
-                  textAlign: 'center',
-                  marginBottom: '2rem',
-                  padding: '2rem',
-                  background: 'white',
-                  borderRadius: '16px',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                  border: book.required ? '2px solid #dc2626' : '2px solid #e5e7eb'
+            {/* No books required message */}
+            {hasNoBooks() && (
+              <div style={{ 
+                textAlign: 'center', 
+                padding: '3rem',
+                background: 'white',
+                borderRadius: '16px',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                border: '2px solid #10b981'
+              }}>
+                <div style={{
+                  fontSize: '3rem',
+                  marginBottom: '1rem'
                 }}>
-                  <div style={{ 
-                    background: book.required ? '#dc2626' : '#6b7280',
-                    color: 'white',
-                    padding: '0.25rem 0.75rem',
-                    borderRadius: '20px',
-                    fontSize: '0.8rem',
-                    fontWeight: '600',
-                    display: 'inline-block',
-                    marginBottom: '1rem'
-                  }}>
-                    {book.required ? 'REQUIRED' : 'RECOMMENDED'}
-                  </div>
-                  
-                  <h4 style={{ 
-                    fontSize: '1.8rem', 
-                    fontWeight: '700',
-                    color: '#1f2937',
-                    marginBottom: '0.5rem',
-                    lineHeight: '1.3'
-                  }}>
-                    {book.title}
-                  </h4>
-                  
-                  <p style={{ 
-                    fontSize: '1.1rem',
-                    color: '#6b7280',
-                    marginBottom: '1rem'
-                  }}>
-                    by {book.author}
-                  </p>
-                  
-                  <div style={{ 
-                    fontSize: '1.8rem',
-                    fontWeight: '700',
-                    color: '#059669',
-                    marginBottom: '1rem'
-                  }}>
-                    ${book.price}
-                  </div>
-
-                  <p style={{ 
-                    fontSize: '1rem',
-                    color: '#6b7280'
-                  }}>
-                    Available at these stores near {formData.dorm}:
-                  </p>
+                  ✅
                 </div>
+                <h4 style={{ 
+                  fontSize: '1.8rem', 
+                  color: '#10b981',
+                  marginBottom: '1rem',
+                  fontWeight: '700'
+                }}>
+                  No Books Required!
+                </h4>
+                <p style={{ 
+                  color: '#6b7280',
+                  fontSize: '1.1rem'
+                }}>
+                  All course materials are available on Brightspace or provided by the professor.
+                </p>
+              </div>
+            )}
 
-                {/* Bookstores for this book */}
+            {/* Digital Books Section */}
+            {!hasNoBooks() && getDigitalBooks().length > 0 && (
+              <div style={{ marginBottom: '3rem' }}>
+                <h4 style={{ 
+                  fontSize: '1.5rem', 
+                  fontWeight: '600',
+                  color: '#059669',
+                  marginBottom: '1.5rem',
+                  textAlign: 'center'
+                }}>
+                  📱 Available Online ({getDigitalBooks().length})
+                </h4>
                 <div style={{ 
                   display: 'grid', 
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', 
-                  gap: '2rem'
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+                  gap: '1.5rem'
                 }}>
-                  {getBookstoresForDorm().map((store, storeIndex) => (
-                    <BookstoreCard 
-                      key={`${bookIndex}-${storeIndex}`}
-                      store={store}
-                      book={book}
-                      studentName={formData.name}
-                    />
+                  {getDigitalBooks().map((book, index) => (
+                    <div key={index} style={{
+                      background: 'white',
+                      borderRadius: '12px',
+                      padding: '1.5rem',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      borderLeft: '4px solid #059669'
+                    }}>
+                      <h5 style={{ 
+                        fontSize: '1.2rem', 
+                        fontWeight: '700',
+                        color: '#1f2937',
+                        marginBottom: '0.5rem'
+                      }}>
+                        {book.Title}
+                      </h5>
+                      <p style={{ color: '#6b7280', marginBottom: '0.5rem' }}>
+                        by {book.Author}
+                      </p>
+                      <div style={{ fontSize: '0.9rem', color: '#374151', marginBottom: '1rem' }}>
+                        <div><strong>Course:</strong> {book['Course Code']}</div>
+                        <div><strong>Type:</strong> {book['Required or Supplemental']}</div>
+                        {book.ISBN && <div><strong>ISBN:</strong> {book.ISBN}</div>}
+                      </div>
+                      {(book['Digital?'] && book['Digital?'].startsWith('http')) && (
+                        <a 
+                          href={book['Digital?']} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          style={{
+                            background: '#059669',
+                            color: 'white',
+                            padding: '8px 16px',
+                            borderRadius: '20px',
+                            textDecoration: 'none',
+                            fontSize: '0.9rem',
+                            fontWeight: '600',
+                            display: 'inline-block',
+                            marginRight: '10px'
+                          }}
+                        >
+                          📖 Access Online
+                        </a>
+                      )}
+                      {(book['First year/Notes'] && book['First year/Notes'].startsWith('http')) && (
+                        <a 
+                          href={book['First year/Notes']} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          style={{
+                            background: '#059669',
+                            color: 'white',
+                            padding: '8px 16px',
+                            borderRadius: '20px',
+                            textDecoration: 'none',
+                            fontSize: '0.9rem',
+                            fontWeight: '600',
+                            display: 'inline-block'
+                          }}
+                        >
+                          📖 Access Online
+                        </a>
+                      )}
+                      {(book.Notes && book.Notes.toLowerCase().includes('brightspace')) && (
+                        <div style={{
+                          background: '#059669',
+                          color: 'white',
+                          padding: '8px 16px',
+                          borderRadius: '20px',
+                          fontSize: '0.9rem',
+                          fontWeight: '600',
+                          display: 'inline-block'
+                        }}>
+                          📚 Available on Brightspace
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
-            ))}
+            )}
+
+            {/* Physical Books Section */}
+            {!hasNoBooks() && getPhysicalBooks().length > 0 && (
+              <div>
+                <h4 style={{ 
+                  fontSize: '1.5rem', 
+                  fontWeight: '600',
+                  color: '#dc2626',
+                  marginBottom: '1.5rem',
+                  textAlign: 'center'
+                }}>
+                  🏪 Bookstore Required ({getPhysicalBooks().length})
+                </h4>
+                
+                {/* For each physical book, show bookstore cards */}
+                {getPhysicalBooks().map((book, bookIndex) => (
+                  <div key={bookIndex} style={{ marginBottom: '3rem' }}>
+                    <div style={{ 
+                      textAlign: 'center',
+                      marginBottom: '2rem',
+                      padding: '2rem',
+                      background: 'white',
+                      borderRadius: '16px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      border: book['Required or Supplemental']?.toLowerCase().includes('required') ? '2px solid #dc2626' : '2px solid #e5e7eb'
+                    }}>
+                      <div style={{ 
+                        background: book['Required or Supplemental']?.toLowerCase().includes('required') ? '#dc2626' : '#6b7280',
+                        color: 'white',
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '20px',
+                        fontSize: '0.8rem',
+                        fontWeight: '600',
+                        display: 'inline-block',
+                        marginBottom: '1rem'
+                      }}>
+                        {book['Required or Supplemental']?.toLowerCase().includes('required') ? 'REQUIRED' : 'RECOMMENDED'}
+                      </div>
+                      
+                      <h5 style={{ 
+                        fontSize: '1.8rem', 
+                        fontWeight: '700',
+                        color: '#1f2937',
+                        marginBottom: '0.5rem',
+                        lineHeight: '1.3'
+                      }}>
+                        {book.Title}
+                      </h5>
+                      
+                      <p style={{ 
+                        fontSize: '1.1rem',
+                        color: '#6b7280',
+                        marginBottom: '1rem'
+                      }}>
+                        by {book.Author}
+                      </p>
+                      
+                      <div style={{ fontSize: '0.9rem', color: '#374151', marginBottom: '1rem' }}>
+                        <div><strong>Course:</strong> {book['Course Code']}</div>
+                        <div><strong>Type:</strong> {book['Required or Supplemental']}</div>
+                        {book.ISBN && <div><strong>ISBN:</strong> {book.ISBN}</div>}
+                        {book.Notes && <div><strong>Notes:</strong> {book.Notes}</div>}
+                      </div>
+
+                      <p style={{ 
+                        fontSize: '1rem',
+                        color: '#6b7280'
+                      }}>
+                        Available at these stores near {formData.dorm}:
+                      </p>
+                    </div>
+
+                    {/* Bookstores for this book */}
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', 
+                      gap: '2rem'
+                    }}>
+                      {getBookstoresForDorm().map((store, storeIndex) => (
+                        <BookstoreCard 
+                          key={`${bookIndex}-${storeIndex}`}
+                          store={store}
+                          book={{
+                            title: book.Title,
+                            author: book.Author,
+                            price: 29.99, // You can add price logic here
+                            required: book['Required or Supplemental']?.toLowerCase().includes('required')
+                          }}
+                          studentName={formData.name}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* No books found message - only show if there are books but they don't match the class */}
+            {!hasNoBooks() && getBooksForClass().length === 0 && (
+              <div style={{ 
+                textAlign: 'center', 
+                padding: '3rem',
+                background: 'white',
+                borderRadius: '16px',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+              }}>
+                <h4 style={{ 
+                  fontSize: '1.5rem', 
+                  color: '#6b7280',
+                  marginBottom: '1rem'
+                }}>
+                  No books found for this class
+                </h4>
+                <p style={{ color: '#9ca3af' }}>
+                  Please check your selections or contact your professor for more information.
+                </p>
+              </div>
+            )}
           </div>
         </section>
       )}

@@ -1,12 +1,40 @@
 import React from 'react';
 
 const BookstoreCard = ({ store, book, studentName }) => {
-  // Function to create Secret Kingdoms search URL
-  const createSecretKingdomsLink = (bookTitle) => {
-    // Encode the book title for URL
+  // Function to create bookstore-specific search URLs
+  const createBookstoreLink = (bookTitle, storeName) => {
     const searchQuery = encodeURIComponent(bookTitle);
-    // Replace with actual Secret Kingdoms URL structure
-    return `https://thesecretkingdoms.net/busqueda/listaLibros.php?tipoBus=full&aproximada=N&palabrasBusqueda=${searchQuery}`;
+    
+    switch (storeName) {
+      case 'Secret Kingdoms':
+        return `https://thesecretkingdoms.net/busqueda/listaLibros.php?tipoBus=full&aproximada=N&palabrasBusqueda=${searchQuery}`;
+      
+      case 'Parentisis':
+        // Replace with actual Parentisis URL structure when you have it
+        return `https://parentisis.com/search?q=${searchQuery}`;
+      
+      case 'Desperate Literature':
+        // Replace with actual Desperate Literature URL structure when you have it
+        return `https://desperateliterature.com/search?query=${searchQuery}`;
+      
+      default:
+        // Fallback to Google search for the bookstore
+        return `https://www.google.com/search?q=${searchQuery}+${encodeURIComponent(storeName)}`;
+    }
+  };
+
+  // Function to get bookstore-specific button text
+  const getButtonText = (storeName) => {
+    switch (storeName) {
+      case 'Secret Kingdoms':
+        return '🛒 Buy at Secret Kingdoms';
+      case 'Parentisis':
+        return '📚 Buy at Parentisis';
+      case 'Desperate Literature':
+        return '📖 Buy at Desperate Literature';
+      default:
+        return `🛍️ Buy at ${storeName}`;
+    }
   };
 
   return (
@@ -136,7 +164,7 @@ const BookstoreCard = ({ store, book, studentName }) => {
             fontWeight: '600',
             margin: '0.25rem 0 0 0'
           }}>
-            {book.title} - ${book.price}
+            {book.title}
           </p>
         </div>
       </div>
@@ -179,9 +207,9 @@ const BookstoreCard = ({ store, book, studentName }) => {
           📍 View on Maps
         </a>
 
-        {/* Secret Kingdoms Link Button */}
+        {/* Bookstore-specific Link Button */}
         <a
-          href={createSecretKingdomsLink(book.title)}
+          href={createBookstoreLink(book.title, store.name)}
           target="_blank"
           rel="noopener noreferrer"
           style={{
@@ -207,7 +235,7 @@ const BookstoreCard = ({ store, book, studentName }) => {
             e.target.style.boxShadow = '0 4px 15px rgba(124, 58, 237, 0.3)';
           }}
         >
-          🛒 Buy at Secret Kingdoms
+          {getButtonText(store.name)}
         </a>
       </div>
 

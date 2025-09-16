@@ -28,49 +28,71 @@ const Homepage = () => {
   const dormBookstores = {
     'Chamberi': [
       {
-        name: 'Librería Central',
-        address: 'Calle de Fuencarral, 15',
-        distance: '3 min walk',
-        phone: '+34 915 21 48 98',
+        name: 'Secret Kingdoms',
+        address: 'Calle de Moratin, 7',
+        distance: '29 min metro',
+        phone: '+34 633 24 30 57',
         availability: 'In Stock'
       },
       {
-        name: 'Books & More Madrid',
-        address: 'Calle de Sagasta, 8',
-        distance: '5 min walk', 
-        phone: '+34 914 47 82 34',
+        name: 'Parentisis',
+        address: 'Calle de Valencia, 30, Centro',
+        distance: '23 min metro', 
+        phone: '+34 626 70 92 62',
+        availability: 'In Stock'
+      },
+      {
+        name: 'Desperate Literature',
+        address: 'Calle de la Cava Baja, 8',
+        distance: '27 min metro', 
+        phone: '+34 626 70 92 62',
         availability: 'In Stock'
       }
+
     ],
     'Moncloa': [
       {
-        name: 'Librería Complutense',
-        address: 'Calle de Isaac Peral, 3',
-        distance: '2 min walk',
-        phone: '+34 915 49 67 12',
+        name: 'Secret Kingdoms',
+        address: 'Calle de Moratin, 7',
+        distance: '22 min metro',
+        phone: '+34 633 24 30 57',
         availability: 'In Stock'
       },
       {
-        name: 'Papelería Universidad',
-        address: 'Calle de la Princesa, 25',
-        distance: '4 min walk',
-        phone: '+34 915 43 89 76',
-        availability: 'Limited Stock'
+        name: 'Parentisis',
+        address: 'Calle de Valencia, 30, Centro',
+        distance: '17 min metro', 
+        phone: '+34 626 70 92 62',
+        availability: 'In Stock'
+      },
+      {
+        name: 'Desperate Literature',
+        address: 'Calle de la Cava Baja, 8',
+        distance: '20 min metro', 
+        phone: '+34 911 88 80 89',
+        availability: 'In Stock'
       }
     ],
     'Malasaña': [
       {
-        name: 'La Casa del Libro Fuencarral',
-        address: 'Calle de Fuencarral, 119',
-        distance: '6 min walk',
-        phone: '+34 915 21 83 46',
+        name: 'Secret Kingdoms',
+        address: 'Calle de Moratin, 7',
+        distance: '23 min metro',
+        phone: '+34 633 24 30 57',
         availability: 'In Stock'
       },
       {
-        name: 'Librería Berkana',
-        address: 'Calle de Hortaleza, 64',
-        distance: '8 min walk',
-        phone: '+34 915 22 95 99',
+        name: 'Parentisis',
+        address: 'Calle de Valencia, 30, Centro',
+        distance: '19 min metro', 
+        phone: '+34 626 70 92 62',
+        availability: 'In Stock'
+      },
+      {
+        name: 'Desperate Literature',
+        address: 'Calle de la Cava Baja, 8',
+        distance: '19 min metro', 
+        phone: '+34 911 88 80 89',
         availability: 'In Stock'
       }
     ]

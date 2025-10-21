@@ -1,123 +1,46 @@
+// routes/auth.js — single librarian login with normalization + optional debug
 const express = require('express');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { pool } = require('../server');
+const dotenv = require('dotenv');
+dotenv.config();
 
 const router = express.Router();
 
-// Login bookstore
-router.post('/login', async (req, res) => {
-  try {
-    const { username, password } = req.body;
+// normalize helper to avoid hidden spaces/newlines or Unicode weirdness
+const norm = (s) => String(s ?? '')
+  .normalize('NFKC')
+  .replace(/\r?\n/g, '')
+  .trim();
 
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
-    }
+const JWT_SECRET = process.env.JWT_SECRET || 'please-change-this-secret';
 
-    // Find bookstore by username
-    const result = await pool.query(
-      'SELECT id, name, username, password_hash FROM bookstores WHERE username = $1',
-      [username]
-    );
+// read & normalize expected creds from .env (or use defaults)
+const ADMIN_USERNAME = norm(process.env.ADMIN_USERNAME ?? 'NYUMADRID67!');
+const ADMIN_PASSWORD = norm(process.env.ADMIN_PASSWORD ?? 'm4dr1d-L1br@ry-2025-!#%');
 
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+// optional console debugging if you set AUTH_DEBUG=1 in .env
+if (process.env.AUTH_DEBUG === '1') {
+  console.log('[auth] expected username:', JSON.stringify(ADMIN_USERNAME));
+  console.log('[auth] expected password length:', ADMIN_PASSWORD.length);
+}
 
-    const bookstore = result.rows[0];
+// POST /api/auth/login  -> returns { ok, token } if creds match
+router.post('/login', (req, res) => {
+  const { username, password } = req.body || {};
+  const u = norm(username);
+  const p = norm(password);
 
-    // Check password
-    const isValidPassword = await bcrypt.compare(password, bookstore.password_hash);
-    
-    if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { 
-        id: bookstore.id, 
-        username: bookstore.username,
-        name: bookstore.name
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    res.json({
-      success: true,
-      token,
-      user: {
-        id: bookstore.id,
-        name: bookstore.name,
-        username: bookstore.username
-      }
-    });
-
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Server error during login' });
+  if (u !== ADMIN_USERNAME || p !== ADMIN_PASSWORD) {
+    return res.status(401).json({ ok: false, error: 'invalid_credentials' });
   }
+
+  const token = jwt.sign({ role: 'librarian' }, JWT_SECRET, { expiresIn: '12h' });
+  return res.json({ ok: true, token });
 });
 
-// Register new bookstore (for future use)
-router.post('/register', async (req, res) => {
-  try {
-    const { name, username, password, email, phone, address } = req.body;
-
-    if (!name || !username || !password || !address) {
-      return res.status(400).json({ error: 'Name, username, password, and address are required' });
-    }
-
-    // Check if username already exists
-    const existingUser = await pool.query(
-      'SELECT id FROM bookstores WHERE username = $1',
-      [username]
-    );
-
-    if (existingUser.rows.length > 0) {
-      return res.status(400).json({ error: 'Username already exists' });
-    }
-
-    // Hash password
-    const saltRounds = 10;
-    const passwordHash = await bcrypt.hash(password, saltRounds);
-
-    // Insert new bookstore
-    const result = await pool.query(
-      `INSERT INTO bookstores (name, username, password_hash, email, phone, address) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
-       RETURNING id, name, username`,
-      [name, username, passwordHash, email, phone, address]
-    );
-
-    const newBookstore = result.rows[0];
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { 
-        id: newBookstore.id, 
-        username: newBookstore.username,
-        name: newBookstore.name
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    res.status(201).json({
-      success: true,
-      token,
-      user: {
-        id: newBookstore.id,
-        name: newBookstore.name,
-        username: newBookstore.username
-      }
-    });
-
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Server error during registration' });
-  }
+// (optional) quick check of what the server expects (never expose in prod)
+router.get('/_expected', (_req, res) => {
+  res.json({ username: ADMIN_USERNAME, passwordLength: ADMIN_PASSWORD.length });
 });
 
 module.exports = router;

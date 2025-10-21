@@ -1,13 +1,130 @@
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* frontend/src/index.css */
+
+/* 1) Design tokens */
+:root{
+  /* brand */
+  --brand-50:#f5f3ff; --brand-100:#ede9fe; --brand-200:#ddd6fe;
+  --brand-300:#c4b5fd; --brand-400:#a78bfa; --brand-500:#8b5cf6;
+  --brand-600:#7c3aed; --brand-700:#6d28d9; --brand-800:#5b21b6; --brand-900:#4c1d95;
+
+  /* neutrals */
+  --bg:#f8fafc; --panel:#ffffff; --line:#e5e7eb; --muted:#6b7280; --text:#1f2937;
+
+  /* accents */
+  --success:#16a34a; --success-weak:#dcfce7;
+  --warning:#d97706; --warning-weak:#fef3c7;
+  --danger:#dc2626;  --danger-weak:#fee2e2;
+  --info:#0ea5e9;    --info-weak:#e0f2fe;
+
+  /* layout */
+  --radius-sm:8px; --radius:12px; --radius-lg:16px; --radius-xl:20px;
+  --shadow-sm:0 2px 6px rgba(0,0,0,.05);
+  --shadow:0 10px 25px rgba(0,0,0,.08);
+  --shadow-lg:0 20px 40px rgba(0,0,0,.12);
+  --focus:0 0 0 3px rgba(124,58,237,.18);
+  --transition:.2s ease;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+/* 2) Base reset + typography */
+*{box-sizing:border-box}
+html,body,#root{height:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
 }
+h1,h2,h3,h4,h5{margin:0 0 .5rem; font-weight:800; letter-spacing:-.015em}
+h1{font-size:2rem} h2{font-size:1.6rem} h3{font-size:1.25rem}
+p{margin:.5rem 0 1rem; color:var(--muted); line-height:1.6}
+a{color:var(--brand-700); text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* 3) Layout helpers */
+.container{max-width:1200px; margin:0 auto; padding:0 20px}
+.section{padding:2rem 0}
+.card{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:var(--radius-xl);
+  box-shadow:var(--shadow);
+  padding:2rem;
+}
+.grid{display:grid; gap:1rem}
+.grid-2{grid-template-columns:1fr 1fr}
+.grid-3{grid-template-columns:repeat(3,1fr)}
+@media (max-width:900px){ .grid-2,.grid-3{grid-template-columns:1fr} }
+
+/* 4) Buttons */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center;
+  gap:.5rem; font-weight:700; font-size:.95rem;
+  padding:.9rem 1.1rem; border-radius:var(--radius);
+  border:1px solid transparent; cursor:pointer; transition:transform var(--transition), box-shadow var(--transition), background var(--transition), border-color var(--transition);
+  user-select:none;
+}
+.btn:focus-visible{outline:none; box-shadow:var(--focus)}
+.btn:disabled{opacity:.6; cursor:not-allowed}
+.btn-primary{
+  color:#fff;
+  background:linear-gradient(135deg,var(--brand-600),var(--brand-500));
+  box-shadow:0 4px 15px rgba(124,58,237,.25);
+}
+.btn-primary:hover{transform:translateY(-1px); box-shadow:0 8px 25px rgba(124,58,237,.35)}
+.btn-outline{
+  background:#fff; color:var(--text); border-color:var(--line);
+}
+.btn-outline:hover{border-color:var(--brand-200); background:var(--brand-50)}
+
+/* 5) Inputs */
+.input, .select, .textarea{
+  width:100%; font-size:1rem; padding:.9rem 1rem;
+  border:2px solid var(--line); border-radius:var(--radius);
+  background:#fff; transition:border-color var(--transition), box-shadow var(--transition);
+  font-family:inherit;
+}
+.input:focus, .select:focus, .textarea:focus{outline:none; border-color:var(--brand-600); box-shadow:var(--focus)}
+.label{display:block; font-weight:700; color:#374151; margin:.75rem 0 .5rem}
+.help{font-size:.85rem; color:var(--muted)}
+
+/* 6) Pills / badges */
+.badge{
+  display:inline-flex; align-items:center; gap:.35rem;
+  padding:.35rem .6rem; font-size:.8rem; font-weight:700; border-radius:999px;
+  border:1px solid transparent;
+}
+.badge-success{background:var(--success-weak); color:#166534}
+.badge-warn{background:var(--warning-weak); color:#92400e}
+.badge-info{background:var(--info-weak); color:#075985}
+
+/* 7) Alerts */
+.alert{
+  padding:1rem 1.1rem; border-radius:var(--radius); border:1px solid var(--line); background:#fff;
+}
+.alert-success{background:var(--success-weak); border-color:#86efac; color:#166534}
+.alert-danger{background:var(--danger-weak); border-color:#fecaca; color:#991b1b}
+.alert-info{background:var(--info-weak); border-color:#bae6fd; color:#075985}
+
+/* 8) Tables */
+.table{
+  width:100%; border-collapse:separate; border-spacing:0; background:#fff; border:1px solid var(--line); border-radius:var(--radius-lg); overflow:hidden;
+}
+.table thead th{
+  text-align:left; font-size:.9rem; color:#374151; background:#f8fafc; padding:.85rem 1rem; border-bottom:1px solid var(--line);
+}
+.table tbody td{padding:.85rem 1rem; border-bottom:1px solid var(--line)}
+.table tbody tr:hover{background:#fafafa}
+
+/* 9) Skeletons (loading placeholders) */
+.skeleton{
+  display:inline-block; width:100%; height:1rem; border-radius:8px;
+  background:linear-gradient(90deg,#f2f4f7 25%,#eef2f7 37%,#f2f4f7 63%); background-size:400% 100%; animation:skeleton 1.4s ease infinite;
+}
+@keyframes skeleton{0%{background-position:100% 50%}100%{background-position:0 50%}}
+
+/* 10) Accessibility helpers */
+.sr-only{
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}
+:focus-visible{outline:none; box-shadow:var(--focus)}

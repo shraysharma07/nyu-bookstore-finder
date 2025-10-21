@@ -1,38 +1,300 @@
-.App {
-  text-align: center;
+/* ===========================================
+   Madrid Book Finder – NYU Book Theme (Final)
+   =========================================== */
+
+/* ---------- Theme Variables ---------- */
+:root {
+  --nyu-700:#57068C;
+  --nyu-600:#6a1bb0;
+  --nyu-500:#7c3aed;
+  --indigo-600:#4f46e5;
+
+  --bg:#f7f8fc;
+  --bg-soft:#ffffff;
+  --text:#0f1222;
+  --muted:#5b6470;
+  --border:#e7eaf0;
+
+  --success:#10b981;
+  --warn:#f59e0b;
+  --danger:#ef4444;
+
+  --radius:16px;
+  --shadow-xs:0 1px 3px rgba(0,0,0,.06);
+  --shadow-sm:0 6px 16px rgba(20,20,43,.08);
+  --shadow-md:0 12px 30px rgba(20,20,43,.12);
+  --trans:180ms cubic-bezier(.2,.8,.2,1);
 }
 
-.App-logo {
-  height: 40vmin;
+/* ---------- Base Styles ---------- */
+html, body, #root, .App {
+  min-height: 100%;
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg);
+  overflow-x: hidden;
+}
+
+h1,h2,h3,h4,h5,h6 {
+  letter-spacing:-0.02em;
+  margin: 0 0 .35em;
+}
+p {
+  margin: 0 0 .95em;
+  color: var(--muted);
+}
+a { color: var(--indigo-600); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ---------- Layout ---------- */
+.container { max-width: 1100px; margin:0 auto; padding:0 20px; }
+.section { padding: 42px 0; }
+
+.grid { display:grid; gap:1.1rem; }
+.grid-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+.grid-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+
+@media (max-width: 960px){
+  .grid-3{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+@media (max-width: 640px){
+  .grid-2,.grid-3{ grid-template-columns: 1fr; }
+}
+
+/* ---------- Cards ---------- */
+.card {
+  background: linear-gradient(180deg, var(--bg-soft), color-mix(in oklab, var(--bg-soft), black 2%));
+  border:1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+  transition: transform var(--trans), box-shadow var(--trans), border-color var(--trans);
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+  border-color: color-mix(in oklab, var(--border), var(--nyu-500) 18%);
+}
+
+/* ---------- Form Elements ---------- */
+.label {
+  display:block;
+  font-size: .86rem;
+  font-weight:700;
+  color: var(--muted);
+  margin-bottom: .45rem;
+  text-transform: uppercase;
+  letter-spacing:.03em;
+}
+
+.input,.select,.textarea {
+  width:100%;
+  background:#ffffff;
+  color: var(--text);
+  border:1px solid var(--border);
+  border-radius: 12px;
+  padding: .85rem 1rem;
+  outline:none;
+  transition: border-color var(--trans), box-shadow var(--trans);
+  box-shadow: var(--shadow-xs) inset;
+}
+.input::placeholder { color: #9ca3af; }
+
+.input:focus,.select:focus,.textarea:focus {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 4px rgba(124,58,237,.18);
+}
+
+select {
+  -webkit-appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%),
+    linear-gradient(to right, transparent, transparent);
+  background-position:
+    calc(100% - 18px) calc(1em - 2px),
+    calc(100% - 13px) calc(1em - 2px),
+    calc(100% - 2.5rem) 0.5rem;
+  background-size: 5px 5px, 5px 5px, 1px 1.6em;
+  background-repeat: no-repeat;
+  padding-right: 2.5rem !important;
+}
+
+.help { font-size:.85rem; color: #6b7280; opacity:.9; margin-top:.45rem; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  appearance: none;
+  border:1px solid transparent;
+  border-radius: 12px;
+  padding: .85rem 1.15rem;
+  font-weight:800;
+  transition: transform var(--trans), box-shadow var(--trans);
+  cursor:pointer;
+  box-shadow: var(--shadow-sm);
+  letter-spacing:.01em;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--nyu-600), var(--nyu-500));
+  color:#fff;
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  filter: brightness(1.05);
+}
+
+.btn-secondary {
+  background: #eef2ff;
+  color: #3730a3;
+  border:1px solid #c7d2fe;
+}
+.btn-secondary:hover {
+  transform: translateY(-1px);
+  border-color: #818cf8;
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--text);
+  border:1px solid var(--border);
+}
+.btn-outline:hover {
+  border-color: var(--nyu-500);
+  color: var(--nyu-600);
+  transform: translateY(-1px);
+}
+
+/* ---------- Badges ---------- */
+.badge {
+  display:inline-flex;
+  align-items:center;
+  gap:.45rem;
+  padding:.35rem .65rem;
+  font-weight:800;
+  border-radius:999px;
+  font-size:.78rem;
+  border:1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--muted);
+}
+.badge-info {
+  color:#4c1d95;
+  background:#ede9fe;
+  border-color:#ddd6fe;
+}
+.badge-warn { color:#92400e; background:#fef3c7; border-color:#fde68a; }
+.badge-success { color:#065f46; background:#ecfdf5; border-color:#d1fae5; }
+
+/* ---------- Skeleton Loaders ---------- */
+.skeleton {
+  background: linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%);
+  background-size:200% 100%;
+  animation: shimmer 1.2s infinite linear;
+  border-radius:10px;
+}
+@keyframes shimmer {
+  from { background-position:200% 0; }
+  to { background-position:-200% 0; }
+}
+
+/* ---------- Tabs ---------- */
+.tabs {
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+  padding:.35rem;
+  border-radius:999px;
+  background:#ffffffa6;
+  border:1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+}
+.tabs .tab {
+  border-radius:999px;
+  padding:.55rem 1rem;
+  border:1px solid transparent;
+  background:transparent;
+  color: #374151;
+  font-weight:800;
+  cursor:pointer;
+  transition: all var(--trans);
+}
+.tabs .tab[aria-selected="true"] {
+  background: linear-gradient(135deg, var(--nyu-600), var(--nyu-500));
+  color:#fff;
+  box-shadow: var(--shadow-sm);
+}
+.tabs .tab:hover { transform: translateY(-1px); }
+
+/* ---------- Utility ---------- */
+hr { height:1px; border:none; background: var(--border); margin: 18px 0; }
+
+/* ==========================================
+   Subtle Centered Background (Book Texture)
+   ========================================== */
+
+/* ==========================================
+   Full "Book Page" Background Experience
+   ========================================== */
+
+/* Body gradient that transitions smoothly into the pattern */
+body {
+  background: linear-gradient(180deg,
+    #6a1bb0 0%,         /* start under navbar */
+    #7c3aed 6%,
+    #f8f7fc 15%,
+    #ffffff 25%,
+    #ffffff 85%,
+    #f4f1fb 100%
+  );
+  color: var(--text);
+  overflow-x: hidden;
+}
+
+/* Full-width subtle pattern overlay */
+.App::before {
+  content: "";
+  position: fixed;
+  top: 70px;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background:
+    radial-gradient(900px 600px at 80% -100px, rgba(124,58,237,0.12), transparent 70%),
+    radial-gradient(700px 500px at -10% 50%, rgba(87,6,140,0.12), transparent 60%),
+    url("/public/assets/pattern-books.png");
+  background-repeat: repeat;
+  background-size: 350px 260px;
+  background-attachment: fixed;
+  filter: brightness(1) opacity(0.14);
+  z-index: 0;
+}
+
+/* Fade out pattern near footer */
+.App::after {
+  content: "";
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 200px;
+  background: linear-gradient(to top, #f4f1fb 0%, transparent 100%);
   pointer-events: none;
+  z-index: 1;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+/* Keep all content above the pattern */
+.App, main, section, .section {
+  position: relative;
+  z-index: 2;
+  background: transparent !important;
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
-}
-
-.App-link {
-  color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+/* Optional: softer container max width */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
 }

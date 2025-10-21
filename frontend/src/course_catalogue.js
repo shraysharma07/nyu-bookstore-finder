@@ -50,7 +50,7 @@ Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Bann, S.",The Clothing
 Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Blunt, A.",Poussin,1 873429 649,Required  ,,Content,https://tinyurl.com/5cc93xtf,
 Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Brown, J.",Velázquez: Painter and Courtier,0-300038941,Required  ,Brightspace,Content,Not available,
 Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Harrison, C.",Art in Theory 1648-1815,0-631-20064-9,Required  ,Brightspace,Content,Not available,
-Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Labanyi, J.",Visualizing Spanish  Modernity,9781859738061,Required  ,"Chapter: Horror, spectacle and nation-formation: historical painting in late nineteenth-century Spain.",Content,https://tinyurl.com/ync7b9ds,
+Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Labanyi, J.",Visualizing Spanish Modernity,9781859738061,Required  ,"Chapter: Horror, spectacle and nation-formation: historical painting in late nineteenth-century Spain.",Content,https://tinyurl.com/ync7b9ds,
 Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Marías, F.",El Greco. Life and Work- A new history.,978-0-500-09377-1,Required  ,Brightspace,Content,Not available,
 Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Moxey, K.",The Practice of Theory,0-8014-8153-8,Required  ,,Content,https://tinyurl.com/339cukyk,
 Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Schulz, A.","Goya’s Caprichos. Aesthetics, Perception and the Body",978-0-521-82105-6,Required  ,Brightspace,Content,Not available,
@@ -73,7 +73,7 @@ Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Bustamante, A.",Las Id
 Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Eisenman, S.",Nineteenth Century Art. A Critical History,0-500-28335-4,Supplemental,,Content,Not available,
 Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Harris, E.",Velazquez,7143822310,Supplemental,,Content,Not available,
 Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Harris, E.",Goya,714829757,Supplemental,,Content,Not available,
-Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Larson, S.",Visualizing Spanish  Modernity,185973801X,Supplemental,,Content,Not available,
+Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Larson, S.",Visualizing Spanish Modernity,185973801X,Supplemental,,Content,Not available,
 Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Marías, F.",Velázquez,84-8495503387,Supplemental,,Content,Not available,
 Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Marías, F.",Otras Meninas,84-7844-221-9,Supplemental,,Content,Not available,
 Doménech1,ARTH-UA.9338,MASTERPIECES IN THE PRADO MUSEUM,"Rohmann, Chris",The Oxford Guide to Classical Mythology in the Arts,195049985,Supplemental,,Content,Not available,

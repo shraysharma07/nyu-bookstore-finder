@@ -1,6 +1,13 @@
 // src/App.js
 import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  Link,
+  useLocation,
+} from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import AdminPage from './pages/AdminPage';
@@ -24,7 +31,10 @@ const Navigation = ({ user, onLogout }) => {
 
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/';
-    return location.pathname === path || location.pathname.startsWith(path + '/');
+    return (
+      location.pathname === path ||
+      location.pathname.startsWith(path + '/')
+    );
   };
 
   const navLinkStyle = (path) => ({
@@ -36,21 +46,41 @@ const Navigation = ({ user, onLogout }) => {
     fontSize: '0.95rem',
     transition: 'all 0.2s ease',
     background: isActive(path) ? 'rgba(255, 255, 255, 0.15)' : 'transparent',
-    border: isActive(path) ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid transparent',
-    display: 'inline-block'
+    border: isActive(path)
+      ? '1px solid rgba(255, 255, 255, 0.25)'
+      : '1px solid transparent',
+    display: 'inline-block',
   });
 
   const hoverIn = (e, path) => {
-    if (!isActive(path)) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+    if (!isActive(path))
+      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
   };
   const hoverOut = (e, path) => {
     if (!isActive(path)) e.currentTarget.style.background = 'transparent';
   };
 
+  // Robust display name/initials (works whether we get { username } or { name })
+  const displayName =
+    (user?.username ||
+      user?.name ||
+      localStorage.getItem('nyu_admin_name') ||
+      'Admin').trim();
+  const initial = displayName ? displayName.charAt(0).toUpperCase() : 'A';
+
+  const handleSignOut = () => {
+    try {
+      localStorage.removeItem('nyu_token');
+      localStorage.removeItem('nyu_admin_name');
+    } catch {}
+    if (typeof onLogout === 'function') onLogout();
+  };
+
   return (
     <nav
       style={{
-        background: 'linear-gradient(135deg, #57068C 0%, #7c3aed 60%, #8b5cf6 100%)',
+        background:
+          'linear-gradient(135deg, #57068C 0%, #7c3aed 60%, #8b5cf6 100%)',
         padding: '0.9rem 0',
         position: 'sticky',
         top: 0,
@@ -184,21 +214,21 @@ const Navigation = ({ user, onLogout }) => {
                   fontWeight: 'bold',
                 }}
               >
-                {user.name.charAt(0)}
+                {initial}
               </div>
               <span
                 style={{
                   color: '#f3f4f6',
                   fontSize: '0.95rem',
-                  fontWeight: '600',
+                  fontWeight: 600,
                 }}
               >
-                {user.name}
+                {displayName}
               </span>
             </div>
 
             <button
-              onClick={onLogout}
+              onClick={handleSignOut}
               className="btn btn-outline"
               style={{ color: '#fff', borderColor: 'rgba(255,255,255,.35)' }}
             >
@@ -215,8 +245,18 @@ const Navigation = ({ user, onLogout }) => {
 function App() {
   const [user, setUser] = useState(null);
 
-  const handleLogin = (userData) => setUser(userData);
-  const handleLogout = () => setUser(null);
+  const handleLogin = (userData) => {
+    // persist a readable name for the navbar (optional)
+    const name = userData?.username || userData?.name || 'Admin';
+    try {
+      localStorage.setItem('nyu_admin_name', name);
+    } catch {}
+    setUser(userData);
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+  };
 
   return (
     <Router>

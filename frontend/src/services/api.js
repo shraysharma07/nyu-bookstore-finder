@@ -1,7 +1,12 @@
 // frontend/src/services/api.js
 
-// i normalize the base so i can call request('/auth/login') and it always hits /api
-const RAW_BASE = process.env.REACT_APP_API_URL || '';
+// I normalize the base so I can call request('/auth/login') and it always hits /api.
+// Supports both REACT_APP_API_BASE_URL and REACT_APP_API_URL for flexibility.
+const RAW_BASE =
+  process.env.REACT_APP_API_BASE_URL ||
+  process.env.REACT_APP_API_URL ||
+  '';
+
 const API_BASE = RAW_BASE
   ? (RAW_BASE.endsWith('/api') ? RAW_BASE : `${RAW_BASE.replace(/\/$/, '')}/api`)
   : '/api'; // same-origin dev proxy

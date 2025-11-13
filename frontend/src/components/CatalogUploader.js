@@ -1,20 +1,19 @@
 // frontend/src/components/CatalogUploader.js
 import React, { useRef, useState } from 'react';
-
-const API_BASE = process.env.REACT_APP_API_BASE || ''; // optional override, else same origin
+import Api from '../services/api';
 
 const CatalogUploader = ({ onDataExtracted }) => {
-  // i'm keeping state simple & explicit so it's easy to debug later
+  // simple, explicit state for easy debugging
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState('');          // user-readable status
   const [error, setError] = useState('');                // user-readable error
   const [extractedData, setExtractedData] = useState(null);
   const [fileName, setFileName] = useState('');
-  const abortRef = useRef(null);
+  const abortRef = useRef(null); // reserved in case you add AbortController support in ApiService later
 
   const MAX_MB = 10;
 
-  // i run the upload/parse with a robust flow + fallback to /parse if /upload 404/405
+  // Upload + parse via ApiService
   const uploadAndParse = async (file) => {
     setIsProcessing(true);
     setError('');
@@ -23,8 +22,7 @@ const CatalogUploader = ({ onDataExtracted }) => {
     // basic client validation (browser MIME can be flaky; backend re-checks too)
     const looksPdf =
       file &&
-      (file.type === 'application/pdf' ||
-       /\.pdf$/i.test(file.name || ''));
+      (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || ''));
     if (!looksPdf) {
       setIsProcessing(false);
       setError('Please choose a .pdf file');
@@ -36,58 +34,16 @@ const CatalogUploader = ({ onDataExtracted }) => {
       return;
     }
 
-    // prep request
-    const formData = new FormData();
-    formData.append('catalog', file);
-
-    const token = localStorage.getItem('nyu_token') || '';
-    const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
-
-    // use AbortController so i can cancel if needed
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    // helper to post to a given path and parse JSON safely
-    const postJson = async (path) => {
-      const res = await fetch(`${API_BASE}${path}`, {
-        method: 'POST',
-        headers: {
-          ...authHeader,
-          // do NOT set Content-Type when sending FormData; browser sets the boundary
-          Accept: 'application/json',
-        },
-        body: formData,
-        signal: controller.signal,
-      });
-      let json;
-      try {
-        json = await res.json();
-      } catch {
-        json = { success: false, error: 'Invalid JSON response from server' };
-      }
-      return { res, json };
-    };
-
     try {
       setProgress('Uploading PDF…');
-      // primary: /upload
-      let { res, json } = await postJson('/api/catalog/upload');
 
-      // fallback: if /upload missing, try /parse for back-compat
-      if (!res.ok && (res.status === 404 || res.status === 405)) {
-        setProgress('Retrying with legacy parser…');
-        ({ res, json } = await postJson('/api/catalog/parse'));
-      }
+      // Primary path: /api/catalog/upload (handled by Api.uploadCatalog)
+      const json = await Api.uploadCatalog(file);
 
-      // handle auth failures explicitly
-      if (res.status === 401) {
-        throw new Error('You are not signed in. Please log in again.');
-      }
-
-      if (!res.ok || !json?.success) {
-        const msg =
-          json?.error ||
-          `Upload failed (${res.status}) — please check the PDF and try again`;
+      // Accept either { ok: true } or { success: true }
+      const ok = Boolean(json?.ok || json?.success);
+      if (!ok) {
+        const msg = json?.error || 'Upload failed — please check the PDF and try again';
         throw new Error(msg);
       }
 
@@ -99,19 +55,15 @@ const CatalogUploader = ({ onDataExtracted }) => {
       );
       if (typeof onDataExtracted === 'function') onDataExtracted(data);
     } catch (err) {
-      if (err.name === 'AbortError') {
-        setError('Upload cancelled');
-      } else {
-        console.error('Catalog upload error:', err);
-        setError(err.message || 'Failed to process PDF');
-      }
+      console.error('Catalog upload error:', err);
+      setError(err.message || 'Failed to process PDF');
     } finally {
       setIsProcessing(false);
       abortRef.current = null;
     }
   };
 
-  // i support both click-to-upload and drag & drop
+  // support both click-to-upload and drag & drop
   const onFileInput = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -130,12 +82,6 @@ const CatalogUploader = ({ onDataExtracted }) => {
 
   const onDragOver = (e) => {
     e.preventDefault();
-  };
-
-  const cancelUpload = () => {
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
   };
 
   const resetAll = () => {
@@ -193,7 +139,7 @@ const CatalogUploader = ({ onDataExtracted }) => {
       </h2>
 
       <p style={{ color: '#6b7280', marginBottom: '1.5rem' }}>
-        Upload the NYU course catalog PDF — i’ll extract courses, professors, and required books.
+        Upload the NYU course catalog PDF — I’ll extract courses, professors, and required books.
       </p>
 
       {/* drop zone */}
@@ -268,23 +214,6 @@ const CatalogUploader = ({ onDataExtracted }) => {
 
         {/* actions */}
         <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-          {isProcessing && (
-            <button
-              type="button"
-              onClick={cancelUpload}
-              style={{
-                background: '#ef4444',
-                color: 'white',
-                border: 'none',
-                padding: '0.6rem 0.9rem',
-                borderRadius: 10,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              Cancel
-            </button>
-          )}
           {(error || extractedData) && (
             <button
               type="button"
@@ -329,12 +258,20 @@ const CatalogUploader = ({ onDataExtracted }) => {
           <PreviewList
             label="Sample courses"
             items={extractedData.courses || []}
-            getLabel={(c) => `${c.code || ''} — ${c.name || ''}${c.professor ? ` (Prof. ${c.professor})` : ''}`}
+            getLabel={(c) =>
+              `${c.code || ''} — ${c.name || ''}${
+                c.professor ? ` (Prof. ${c.professor})` : ''
+              }`
+            }
           />
           <PreviewList
             label="Sample books"
             items={extractedData.books || []}
-            getLabel={(b) => `${b.title || ''}${b.author ? ` by ${b.author}` : ''}${b.isbn ? ` — ISBN ${b.isbn}` : ''}`}
+            getLabel={(b) =>
+              `${b.title || ''}${b.author ? ` by ${b.author}` : ''}${
+                b.isbn ? ` — ISBN ${b.isbn}` : ''
+              }`
+            }
           />
         </div>
       )}

@@ -1,40 +1,45 @@
 // frontend/src/pages/LoginPage.js
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Api from '../services/api';
+import { apiUrl } from '../utils/api';  // ✅ NEW IMPORT
 
 const LoginPage = ({ onLogin }) => {
-  // i’m NOT prefilling the username anymore
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState({ type: 'idle', msg: '' });
   const navigate = useNavigate();
 
-  // set a clean browser tab title for this page
   useEffect(() => {
     const prev = document.title;
-    document.title = 'Admin Login • NYU Bookstore Finder';
+    document.title = 'Admin Login • Madrid Book Finder';
     return () => { document.title = prev; };
   }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!username || !password) {
+      setStatus({ type: 'error', msg: 'Enter username and password' });
+      return;
+    }
     setStatus({ type: 'pending', msg: '' });
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || 'login_failed');
+      // ---------------------------------------------
+      // ✅ FIXED: Use apiUrl() for backend login call
+      // ---------------------------------------------
+      const json = await Api.login(apiUrl('/api/auth/login'), username, password);
+
+      if (!json?.ok || !json?.token) throw new Error('login_failed');
 
       localStorage.setItem('nyu_token', json.token);
+      localStorage.setItem('nyu_admin_name', username || 'Admin');
+
       if (typeof onLogin === 'function') onLogin({ role: 'librarian', username });
 
       setStatus({ type: 'success', msg: 'Signed in' });
       navigate('/admin', { replace: true });
-    } catch (err) {
+    } catch {
       setStatus({ type: 'error', msg: 'Invalid username or password' });
     }
   };
@@ -60,7 +65,6 @@ const LoginPage = ({ onLogin }) => {
         width: '100%',
         border: '1px solid #f3f4f6'
       }}>
-        {/* torch icon */}
         <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
           <div style={{
             width: '60px', height: '72px',
@@ -161,4 +165,3 @@ const LoginPage = ({ onLogin }) => {
 };
 
 export default LoginPage;
-// I removed the "Remember me" checkbox to simplify the login process

@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Api from '../services/api';
-import { apiUrl } from '../utils/api';  // ✅ NEW IMPORT
+import { apiUrl } from '../services/api';  // ✅ NEW IMPORT
 
 const LoginPage = ({ onLogin }) => {
   const [username, setUsername] = useState('');

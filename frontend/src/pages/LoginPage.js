@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Api from '../services/api';
-import { apiUrl } from '../services/api';  // ✅ NEW IMPORT
 
 const LoginPage = ({ onLogin }) => {
   const [username, setUsername] = useState('');
@@ -25,10 +24,8 @@ const LoginPage = ({ onLogin }) => {
     setStatus({ type: 'pending', msg: '' });
 
     try {
-      // ---------------------------------------------
-      // ✅ FIXED: Use apiUrl() for backend login call
-      // ---------------------------------------------
-      const json = await Api.login(apiUrl('/api/auth/login'), username, password);
+      // ✅ Use ApiService, which already knows the base URL from env vars
+      const json = await Api.login(username, password);
 
       if (!json?.ok || !json?.token) throw new Error('login_failed');
 

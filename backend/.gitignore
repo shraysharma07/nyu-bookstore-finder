@@ -1,0 +1,14 @@
+node_modules
+.env
+.DS_Store
+*.log
+dist
+build
+coverage
+.vscode
+.idea
+npm-debug.log*
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml

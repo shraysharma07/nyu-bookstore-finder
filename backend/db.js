@@ -3,15 +3,39 @@ const { Pool } = require('pg');
 const dotenv = require('dotenv');
 dotenv.config();
 
-const pool = new Pool({
-  user:     process.env.DB_USER     || 'your_username',
-  host:     process.env.DB_HOST     || 'localhost',
-  database: process.env.DB_NAME     || 'nyu_book_finder',
-  password: process.env.DB_PASSWORD || 'your_password',
-  port:     Number(process.env.DB_PORT) || 5432,
-  // if you later deploy to a managed PG that requires SSL:
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
-});
+const pick = (keys, env = process.env) =>
+  keys.find((k) => env[k] && env[k].length > 0) || null;
+
+const host = process.env.DB_HOST || process.env.PGHOST || 'localhost';
+const port = Number(process.env.DB_PORT || process.env.PGPORT || 5432);
+const user = process.env.DB_USER || process.env.PGUSER || 'your_username';
+const password = process.env.DB_PASSWORD || process.env.PGPASSWORD || 'your_password';
+const database = process.env.DB_NAME || process.env.PGDATABASE || 'nyu_book_finder';
+
+// Prefer a single DATABASE_URL if present
+const connectionString = process.env.DATABASE_URL || null;
+
+// Enable SSL if either flag is set
+const sslRequired =
+  process.env.DB_SSL === 'true' ||
+  process.env.PGSSLMODE === 'require' ||
+  (process.env.NODE_ENV === 'production' && !!process.env.AWS_EXECUTION_ENV);
+
+const pool = new Pool(
+  connectionString
+    ? {
+        connectionString,
+        ssl: sslRequired ? { rejectUnauthorized: false } : false,
+      }
+    : {
+        host,
+        port,
+        user,
+        password,
+        database,
+        ssl: sslRequired ? { rejectUnauthorized: false } : false,
+      }
+);
 
 pool.on('error', (err) => {
   console.error('[pg] unexpected error on idle client:', err);

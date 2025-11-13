@@ -13,11 +13,18 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
-// ✅ strict CORS for production
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+// ✅ strict CORS for production, but dev-friendly
+const rawAllowed = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map(s => s.trim())
   .filter(Boolean);
+
+const defaultDevOrigins = ['http://localhost:3000'];
+
+const allowedOrigins =
+  process.env.NODE_ENV === 'production'
+    ? rawAllowed
+    : [...rawAllowed, ...defaultDevOrigins];
 
 app.use(cors({
   origin: (origin, cb) => {
@@ -26,7 +33,6 @@ app.use(cors({
   },
   credentials: true
 }));
-
 
 app.use(express.json());
 

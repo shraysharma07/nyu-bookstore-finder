@@ -10,6 +10,7 @@ const RAW_BASE =
 const API_BASE = RAW_BASE
   ? (RAW_BASE.endsWith('/api') ? RAW_BASE : `${RAW_BASE.replace(/\/$/, '')}/api`)
   : '/api'; // same-origin dev proxy
+console.log('[Api] API_BASE at runtime =', API_BASE);
 
 // tiny helpers i reuse everywhere
 const qs = (obj = {}) => {

@@ -14,8 +14,8 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // ✅ strict CORS for production, but dev-friendly
-const rawAllowed = (process.env.ALLOWED_ORIGINS || "")
-  .split(",")
+const rawAllowed = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
   .map(s => s.trim())
   .filter(Boolean);
 
@@ -26,13 +26,24 @@ const allowedOrigins =
     ? rawAllowed
     : [...rawAllowed, ...defaultDevOrigins];
 
-app.use(cors({
+console.log('[CORS] allowed origins:', allowedOrigins);
+
+const corsOptions = {
   origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-    cb(new Error("CORS blocked: " + origin));
+    // allow curl/Postman/etc with no origin
+    if (!origin) return cb(null, true);
+
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+
+    console.error('[CORS] blocked origin:', origin);
+    return cb(new Error('CORS blocked: ' + origin));
   },
-  credentials: true
-}));
+  credentials: true,
+};
+
+// 🔥 apply CORS to all routes + handle preflight
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 app.use(express.json());
 

@@ -24,7 +24,6 @@ const LoginPage = ({ onLogin }) => {
     setStatus({ type: 'pending', msg: '' });
 
     try {
-      // ✅ Use ApiService, which already knows the base URL from env vars
       const json = await Api.login(username, password);
 
       if (!json?.ok || !json?.token) throw new Error('login_failed');
@@ -36,7 +35,8 @@ const LoginPage = ({ onLogin }) => {
 
       setStatus({ type: 'success', msg: 'Signed in' });
       navigate('/admin', { replace: true });
-    } catch {
+    } catch (err) {
+      console.error('Login error', err);
       setStatus({ type: 'error', msg: 'Invalid username or password' });
     }
   };

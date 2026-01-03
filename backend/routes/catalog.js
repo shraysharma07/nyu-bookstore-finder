@@ -1,4 +1,4 @@
-// routes/catalog.js — PDF parser (librarian use)
+// routes/catalog.js — Fall/Spring PDF parser for NYU Madrid book list
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -8,22 +8,24 @@ const { pool } = require('../db');
 
 const router = express.Router();
 
-// make sure uploads dir exists
+// ------- multer setup (temp files on EB instance) -------
 const uploadDir = path.join(process.cwd(), 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const upload = multer({
   dest: uploadDir,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype === 'application/pdf') cb(null, true);
-    else cb(new Error('Only PDF files are allowed'));
+    if (file.mimetype === 'application/pdf') return cb(null, true);
+    cb(new Error('Only PDF files are allowed'));
   }
 });
 
-// POST /api/catalog/parse  (you can add auth middleware later)
-router.post('/parse', upload.single('catalog'), async (req, res) => {
-  let tmpPath = req.file?.path;
+// ------------ MAIN ENDPOINT ------------
+// POST /api/catalog/upload
+router.post('/upload', upload.single('catalog'), async (req, res) => {
+  let tmpPath = req.file && req.file.path;
+
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, error: 'no_file' });
@@ -31,195 +33,327 @@ router.post('/parse', upload.single('catalog'), async (req, res) => {
 
     const dataBuffer = fs.readFileSync(tmpPath);
     const pdfData = await pdf(dataBuffer);
-    const text = pdfData?.text || '';
+    const text = String(pdfData && pdfData.text || '');
 
     const parsed = parseCatalogText(text);
 
+    // save to DB (one semester at a time; delete+reinsert)
     try {
-      await saveToDatabase(parsed);
+      await saveToDatabase(parsed, {
+        semester: process.env.CATALOG_SEMESTER || 'Fall',
+        year: Number(process.env.CATALOG_YEAR) || 2025,
+      });
     } catch (dbErr) {
       console.warn('[catalog] saveToDatabase failed (continuing):', dbErr.message);
     }
 
-    cleanup(tmpPath);
+    safeUnlink(tmpPath);
     tmpPath = null;
 
     return res.json({
       success: true,
       courses: parsed.courses,
       professors: parsed.professors,
-      books: parsed.books
+      books: parsed.books,
     });
   } catch (err) {
-    console.error('[catalog] parse error:', err);
-    if (tmpPath) cleanup(tmpPath);
+    console.error('[catalog] upload/parse error:', err);
+    if (tmpPath) safeUnlink(tmpPath);
     return res.status(500).json({ success: false, error: 'parse_failed' });
   }
 });
 
-function cleanup(p) {
-  try { fs.existsSync(p) && fs.unlinkSync(p); } catch {}
+// optional alias so /api/catalog/parse still works if anything calls it
+router.post('/parse', upload.single('catalog'), async (req, res) => {
+  req.url = '/upload';
+  router.handle(req, res);
+});
+
+// ------- helpers -------
+
+function safeUnlink(p) {
+  try {
+    if (p && fs.existsSync(p)) fs.unlinkSync(p);
+  } catch (_) {}
 }
 
-// ------- your existing parsing logic (kept) -------
-function parseCatalogText(text) {
+/**
+ * Heuristic parser tuned to the “2025 Fall List for Book-finding Site” PDF.
+ *
+ * High-level strategy:
+ * - Split into lines, trim, drop blanks.
+ * - Detect new course blocks by course-code patterns (SPAN-UA 9001, FINC-UB 9002.M01, etc.).
+ * - Inside each course block:
+ *    * Track “detail” lines.
+ *    * Whenever we see an ISBN, create a book entry using:
+ *        - title: the most recent line that looks like a book title
+ *        - author: the most recent line that looks like an author list
+ *        - required vs supplemental: based on nearby lines
+ */
+function parseCatalogText(raw) {
+  const lines = String(raw || '')
+    .split('\n')
+    .map(l => l.replace(/\u00a0/g, ' ').trim()) // remove NBSP
+    .filter(Boolean);
+
   const courses = [];
-  const professors = new Set();
   const books = [];
+  const professorsSet = new Set(); // this will remain mostly empty (catalog rarely lists profs)
 
-  const lines = String(text || '').split('\n');
+  // Course codes look like SPAN-UA 9001, SPAN-UA. 9050, FINC-UB 9002.M01, ACA-UF 9101, etc.
+  const courseCodeRegex =
+    /^([A-Z]{2,8}-[A-Z]{1,3}\.? ?\d{3,4}(?:\.[A-Z0-9]+)?)\s*(.*)$/;
+
+  const metaRegex =
+    /(Required|Recomended|Recommended|Supplemental|Content|Bookstore|Brightspace|LS First Year Abroad|Type of Class|Digital\?|First year\?)/i;
+
+  const likelyAuthorRegex =
+    /^[A-ZÁÉÍÓÚÑ][^0-9]*,\s*[A-ZÁÉÍÓÚÑ][^0-9]*$/; // "Last, First" style
+
   let currentCourse = null;
-  let currentSection = '';
+  let buffer = [];
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = (lines[i] || '').trim();
+  function flushCourse() {
+    if (!currentCourse) return;
+
+    const details = buffer;
+    let lastAuthor = null;
+    let lastTitle = null;
+
+    for (let i = 0; i < details.length; i++) {
+      const line = details[i];
+
+      // skip obvious catalog meta and bookstore notes
+      if (metaRegex.test(line)) continue;
+
+      // keep track of a “recent author-like” line
+      if (likelyAuthorRegex.test(line)) {
+        lastAuthor = line;
+        continue;
+      }
+
+      // keep a candidate title: non-meta, no obvious urls, and not just course notes
+      if (!/https?:\/\//i.test(line) && !/LS First Year Abroad/i.test(line)) {
+        lastTitle = line;
+      }
+
+      const isbnMatch = line.match(/\b(\d{10,13})\b/);
+      if (isbnMatch) {
+        const isbn = isbnMatch[1];
+
+        // Decide required vs supplemental from nearby lines
+        let isRequired = false;
+        let isSupplemental = false;
+
+        for (let j = Math.max(0, i - 3); j <= Math.min(details.length - 1, i + 3); j++) {
+          const context = details[j];
+          if (/Required/i.test(context)) {
+            isRequired = true;
+            break;
+          }
+          if (/Supplemental|Recomended|Recommended/i.test(context)) {
+            isSupplemental = true;
+          }
+        }
+
+        const book = {
+          title: lastTitle || null,
+          author: lastAuthor || null,
+          isbn,
+          courseCode: currentCourse.code,
+          isRequired: isRequired || !isSupplemental,
+        };
+
+        books.push(book);
+        currentCourse.books.push(book);
+      }
+    }
+
+    courses.push(currentCourse);
+    currentCourse = null;
+    buffer = [];
+  }
+
+  for (const lineRaw of lines) {
+    const line = lineRaw.trim();
     if (!line) continue;
 
-    const coursePattern = /^([A-Z]{3,4})-UA\s+(\d+)\s+(.+)/;
-    const courseMatch = line.match(coursePattern);
+    // Skip the header rows like "Course Code Class Title Author Title ISBN"
+    if (/^Course Code\b/i.test(line)) continue;
 
-    if (courseMatch) {
-      if (currentCourse) courses.push(currentCourse);
+    const m = line.match(courseCodeRegex);
+    if (m) {
+      // We hit a new course code -> flush previous one
+      flushCourse();
+
+      const code = m[1].replace(/\s+/g, ' ');
+      const name = (m[2] || '').trim();
+
       currentCourse = {
-        code: `${courseMatch[1]}-UA ${courseMatch[2]}`,
-        name: courseMatch[3].trim(),
-        professor: null,
+        code,
+        name,
+        professor: null, // catalog PDF doesn’t list instructors consistently
         books: [],
         description: ''
       };
-      currentSection = 'course';
+      buffer = [];
       continue;
     }
 
-    const profPattern = /^(Professor|Instructor|Prof\.|Dr\.):?\s+(.+)/i;
-    const profMatch = line.match(profPattern);
-    if (profMatch && currentCourse) {
-      currentCourse.professor = profMatch[2].trim();
-      professors.add(profMatch[2].trim());
+    if (!currentCourse) {
+      // Ignore text that appears before the first course entry
       continue;
     }
 
-    if (/^(Required Text|Required Reading|Required Book|Textbook)/i.test(line)) {
-      currentSection = 'books';
-      continue;
-    }
-
-    const isbnMatch = line.match(/ISBN[:\s-]*(\d{10}|\d{13})/i);
-
-    if (currentSection === 'books' && currentCourse) {
-      const bookPattern1 = /^(.+)\s+by\s+(.+)\s*\((\d{4})\)/;
-      const bookMatch1 = line.match(bookPattern1);
-      const bookPattern2 = /^([^,]+),\s*"?([^",]+)"?,\s*(.+)/;
-      const bookMatch2 = line.match(bookPattern2);
-      const bookPattern3 = /^[\d\-\*•]\s*(.+)/;
-      const bookMatch3 = line.match(bookPattern3);
-
-      let bookInfo = null;
-
-      if (bookMatch1) {
-        bookInfo = { title: bookMatch1[1].trim(), author: bookMatch1[2].trim(), year: bookMatch1[3], isbn: null, courseCode: currentCourse.code, isRequired: true };
-      } else if (bookMatch2 && !isbnMatch) {
-        bookInfo = { title: bookMatch2[2].trim(), author: bookMatch2[1].trim(), publisher: bookMatch2[3].trim(), isbn: null, courseCode: currentCourse.code, isRequired: true };
-      } else if (bookMatch3) {
-        const content = bookMatch3[1];
-        const byIndex = content.toLowerCase().indexOf(' by ');
-        if (byIndex > -1) {
-          bookInfo = { title: content.substring(0, byIndex).trim(), author: content.substring(byIndex + 4).trim(), isbn: null, courseCode: currentCourse.code, isRequired: true };
-        }
-      }
-
-      if (bookInfo && isbnMatch) bookInfo.isbn = isbnMatch[1];
-
-      if (bookInfo) {
-        books.push(bookInfo);
-        currentCourse.books.push(bookInfo);
-      }
-    }
-
-    if (currentSection === 'course' && currentCourse && !/^(Professor|Instructor|Required)/i.test(line)) {
-      currentCourse.description += line + ' ';
-    }
+    buffer.push(line);
   }
 
-  if (currentCourse) courses.push(currentCourse);
+  flushCourse();
 
-  return { courses, professors: Array.from(professors), books };
+  const professors = Array.from(professorsSet); // currently unused/empty but kept for API shape
+
+  console.log(
+    `[catalog] parsed → courses=${courses.length}, books=${books.length}`
+  );
+
+  return { courses, professors, books };
 }
 
-async function saveToDatabase(data) {
+/**
+ * Save parsed catalog to DB.
+ *
+ * Behavior:
+ * - Treats everything as one semester/year (from options or env).
+ * - On each upload, it DELETES previous courses+course_books for that semester/year,
+ *   then re-inserts from the new catalog. So uploads do NOT "stack"; they replace.
+ */
+async function saveToDatabase(data, { semester, year }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
+    // 1) Clear existing data for this semester/year
+    const existingCourses = await client.query(
+      'SELECT id FROM courses WHERE semester = $1 AND year = $2',
+      [semester, year]
+    );
+    const existingCourseIds = existingCourses.rows.map(r => r.id);
+
+    if (existingCourseIds.length) {
+      await client.query(
+        'DELETE FROM course_books WHERE course_id = ANY($1::int[])',
+        [existingCourseIds]
+      );
+      await client.query(
+        'DELETE FROM courses WHERE id = ANY($1::int[])',
+        [existingCourseIds]
+      );
+    }
+
+    // 2) Upsert subjects
     const subjects = new Set();
-    data.courses.forEach(c => subjects.add(c.code.split('-')[0]));
+    data.courses.forEach(c => {
+      if (c.code) {
+        const subj = c.code.split('-')[0];
+        if (subj) subjects.add(subj);
+      }
+    });
 
     const subjectMap = {};
     for (const subject of subjects) {
       const r = await client.query(
-        'INSERT INTO subjects (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = $1 RETURNING id',
+        'INSERT INTO subjects (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id',
         [subject]
       );
       subjectMap[subject] = r.rows[0].id;
     }
 
+    // 3) Insert courses
+    const courseIdByCode = {};
     for (const course of data.courses) {
-      const subjectId = subjectMap[course.code.split('-')[0]];
-      await client.query(
+      const subjectCode = course.code ? course.code.split('-')[0] : null;
+      const subjectId = subjectCode ? subjectMap[subjectCode] : null;
+
+      const r = await client.query(
         `INSERT INTO courses (code, name, professor, subject_id, semester, year)
          VALUES ($1,$2,$3,$4,$5,$6)
-         ON CONFLICT (code, professor) DO UPDATE SET name=$2, subject_id=$4`,
-        [course.code, course.name, course.professor, subjectId, 'Fall', 2025]
+         RETURNING id`,
+        [course.code, course.name, course.professor, subjectId, semester, year]
       );
+
+      courseIdByCode[course.code] = r.rows[0].id;
     }
 
+    // 4) Insert books + course_books (dedupe by title+author+isbn)
     for (const book of data.books) {
-      const exist = await client.query(
-        'SELECT id FROM books WHERE LOWER(title)=LOWER($1) AND LOWER(author)=LOWER($2)',
-        [book.title, book.author]
-      );
-      let bookId = exist.rows[0]?.id;
-      if (!bookId) {
-        const ins = await client.query(
-          'INSERT INTO books (title, author, isbn) VALUES ($1,$2,$3) RETURNING id',
-          [book.title, book.author, book.isbn || null]
-        );
-        bookId = ins.rows[0].id;
-      } else if (book.isbn) {
-        await client.query('UPDATE books SET isbn=$1 WHERE id=$2 AND isbn IS NULL', [book.isbn, bookId]);
-      }
+      if (!book.title && !book.isbn) continue;
 
-      if (book.courseCode) {
-        const cr = await client.query('SELECT id FROM courses WHERE code=$1', [book.courseCode]);
-        if (cr.rows[0]) {
+      const existing = await client.query(
+        `SELECT id FROM books
+         WHERE (LOWER(title) = LOWER($1) OR $1 IS NULL)
+           AND (LOWER(author) = LOWER($2) OR $2 IS NULL)
+           AND (isbn = $3 OR $3 IS NULL)`,
+        [book.title || null, book.author || null, book.isbn || null]
+      );
+
+      let bookId;
+      if (existing.rows[0]) {
+        bookId = existing.rows[0].id;
+        // if we have an ISBN now and the existing row didn't, update it
+        if (book.isbn) {
           await client.query(
-            `INSERT INTO course_books (course_id, book_id, is_required)
-             VALUES ($1,$2,$3) ON CONFLICT (course_id, book_id) DO NOTHING`,
-            [cr.rows[0].id, bookId, !!book.isRequired]
+            'UPDATE books SET isbn = COALESCE(isbn, $1) WHERE id = $2',
+            [book.isbn, bookId]
           );
         }
+      } else {
+        const ins = await client.query(
+          'INSERT INTO books (title, author, isbn) VALUES ($1,$2,$3) RETURNING id',
+          [book.title || null, book.author || null, book.isbn || null]
+        );
+        bookId = ins.rows[0].id;
       }
+
+      const courseId = courseIdByCode[book.courseCode];
+      if (!courseId) continue;
+
+      await client.query(
+        `INSERT INTO course_books (course_id, book_id, is_required)
+         VALUES ($1,$2,$3)
+         ON CONFLICT (course_id, book_id) DO UPDATE SET is_required = EXCLUDED.is_required`,
+        [courseId, bookId, !!book.isRequired]
+      );
     }
 
     await client.query('COMMIT');
+    console.log(
+      `[catalog] saved to DB → courses=${data.courses.length}, books=${data.books.length}, semester=${semester}, year=${year}`
+    );
   } catch (e) {
     await client.query('ROLLBACK');
+    console.error('[catalog] saveToDatabase error:', e);
     throw e;
   } finally {
     client.release();
   }
 }
 
-// summary
+// summary endpoint used by the admin dashboard
 router.get('/summary', async (_req, res) => {
   try {
-    const coursesResult = await pool.query('SELECT COUNT(*) AS count FROM courses');
-    const booksResult = await pool.query('SELECT COUNT(*) AS count FROM books');
-    const professorsResult = await pool.query('SELECT COUNT(DISTINCT professor) AS count FROM courses');
+    const coursesResult = await pool.query(
+      'SELECT COUNT(*) AS count FROM courses'
+    );
+    const booksResult = await pool.query(
+      'SELECT COUNT(*) AS count FROM books'
+    );
+    const professorsResult = await pool.query(
+      'SELECT COUNT(DISTINCT professor) AS count FROM courses WHERE professor IS NOT NULL'
+    );
     res.json({
       courses: Number(coursesResult.rows[0].count || 0),
       books: Number(booksResult.rows[0].count || 0),
-      professors: Number(professorsResult.rows[0].count || 0),
+      professors: Number(professorsResult.rows[0].count || 0)
     });
   } catch (e) {
     console.error('[catalog] summary error:', e);

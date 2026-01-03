@@ -16,15 +16,6 @@ import NewsletterPage from './pages/NewsletterPage';
 import ResultsPage from './pages/ResultsPage';
 import './App.css';
 
-// OPTIONAL: logo support (fallbacks to text if missing)
-let LogoSrc = null;
-try {
-  // eslint-disable-next-line global-require
-  LogoSrc = require('./assets/mbf-logo.svg');
-} catch {
-  // fallback if no logo yet
-}
-
 // --------------- Navigation ---------------
 const Navigation = ({ user, onLogout }) => {
   const location = useLocation();
@@ -99,7 +90,7 @@ const Navigation = ({ user, onLogout }) => {
         }}
       >
         <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
-          {/* Brand logo / wordmark */}
+          {/* Brand */}
           <Link
             to="/"
             style={{
@@ -114,24 +105,16 @@ const Navigation = ({ user, onLogout }) => {
             }}
             className="brand"
           >
-            {LogoSrc ? (
-              <img
-                src={LogoSrc}
-                alt="Madrid Book Finder"
-                style={{ height: 34, width: 'auto', display: 'block' }}
-              />
-            ) : (
-              <span
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: 10,
-                  background: 'rgba(255,255,255,.15)',
-                  fontWeight: 800,
-                }}
-              >
-                MBF
-              </span>
-            )}
+            <span
+              style={{
+                padding: '6px 10px',
+                borderRadius: 10,
+                background: 'rgba(255,255,255,.15)',
+                fontWeight: 800,
+              }}
+            >
+              MBF
+            </span>
             <span className="brand-text">Madrid Book Finder</span>
           </Link>
 
@@ -246,7 +229,6 @@ function App() {
   const [user, setUser] = useState(null);
 
   const handleLogin = (userData) => {
-    // persist a readable name for the navbar (optional)
     const name = userData?.username || userData?.name || 'Admin';
     try {
       localStorage.setItem('nyu_admin_name', name);

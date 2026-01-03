@@ -1,12 +1,13 @@
-// frontend/src/pages/HomePage.js
-// same UX + rules you asked for, just styled with global classes:
-// - Online (NYU Brightspace) shows as its own "store" LAST
-// - If Course Type = Language, only show Booksellers.es (plus Online if present)
+// frontend/src/pages/FindBooksPage.js
+// Home → Find My Books
+// Now: still uses CSV for dropdowns + online URL, but book list comes from backend /api/students/search
+// with a fallback to CSV if the backend has no matches.
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';           // 🔹 added
+import { useNavigate } from 'react-router-dom';
 import BookstoreCard from '../components/BookstoreCard';
 import { csvData } from '../course_catalogue';
+import Api from '../services/api';
 
 // mark imported component as "used" to satisfy eslint (we keep it per your request)
 void BookstoreCard;
@@ -43,7 +44,7 @@ const parseTeacherName = (teacherString) => {
 };
 
 const HomePage = () => {
-  const navigate = useNavigate();                         // 🔹 added
+  const navigate = useNavigate();
 
   // form + results state
   const [formData, setFormData] = useState({
@@ -59,9 +60,8 @@ const HomePage = () => {
   const [teacherMapping, setTeacherMapping] = useState(new Map());
   const booksRef = useRef(null);
 
-  // silence "setters not used" (we're navigating to /results now)
+  // silence "setters not used" for showBooks (we navigate to /results now)
   void setShowBooks;
-  void setIsLoading;
 
   useEffect(() => {
     const prev = document.title;
@@ -167,30 +167,7 @@ const HomePage = () => {
     });
   };
 
-  // 🔹 NEW: navigate to /results with state (keeping everything else unchanged)
-  const handleFindBooks = async () => {
-    if (!formData.name || !formData.dorm || !formData.classType || !formData.teacher || !formData.class) {
-      alert('Please fill in all fields');
-      return;
-    }
-    // Collect the exact data your Results page needs
-    const books = getBooksForClass();
-    const dormStores = dormBookstores[formData.dorm] || [];
-    const onlineUrl = getOnlineUrlForClass();
-    const isLanguage = /(^|\b)language(s)?(\b|$)/i.test((formData.classType || '').trim());
-
-    navigate('/results', {
-      state: {
-        student: formData,     // { name, dorm, classType, teacher, class }
-        books,                 // rows for this class
-        dormStores,            // curated stores for the selected dorm
-        onlineUrl,             // optional Brightspace/online link
-        isLanguage             // whether to restrict to Booksellers.es in Results
-      }
-    });
-  };
-
-  // rows for the selected class
+  // rows for the selected class (from CSV)
   const getBooksForClass = () => {
     if (!formData.teacher || !formData.class || !teacherMapping.has(formData.teacher)) return [];
     return teacherMapping
@@ -209,6 +186,86 @@ const HomePage = () => {
     );
   };
 
+  // build an Online link for the class, if any — becomes a fake "store" LAST
+  const getOnlineUrlForClass = () => {
+    const digital = getDigitalBooks();
+    if (!digital.length) return null;
+    for (const b of digital) {
+      if (b['Digital?'] && b['Digital?'].startsWith('http')) return b['Digital?'];
+      if (b['First year/Notes'] && b['First year/Notes'].startsWith('http')) return b['First year/Notes'];
+    }
+    const hasBrightspaceNote = digital.some(b => (b.Notes || '').toLowerCase().includes('brightspace') || (b.Notes || '').toLowerCase().includes('brightspacce'));
+    return hasBrightspaceNote ? 'https://brightspace.nyu.edu' : null;
+  };
+
+  const getBookstoresForDorm = () => dormBookstores[formData.dorm] || [];
+
+  // NEW: real search → backend, with fallback to CSV
+  const handleFindBooks = async () => {
+    if (!formData.name || !formData.dorm || !formData.classType || !formData.teacher || !formData.class) {
+      alert('Please fill in all fields');
+      return;
+    }
+
+    const csvBooks = getBooksForClass();
+    if (!csvBooks.length) {
+      alert('No books found for this class in the seed catalog yet.');
+      return;
+    }
+
+    const courseCode = (csvBooks[0]['Course Code'] || '').trim();
+    if (!courseCode) {
+      alert('No course code found for this class in the seed data.');
+      return;
+    }
+
+    const dormStores = getBookstoresForDorm();
+    const onlineUrl = getOnlineUrlForClass();
+    const isLanguage = /(^|\b)language(s)?(\b|$)/i.test((formData.classType || '').trim());
+
+    setIsLoading(true);
+    try {
+      const payload = {
+        course: courseCode,
+        professor: formData.teacher || undefined,
+        dorm: formData.dorm || undefined,
+      };
+
+      const json = await Api.searchBooks(payload);
+      console.log('[FindBooks] backend search response:', json);
+
+      let finalBooks = csvBooks;
+
+      if (json && json.success && Array.isArray(json.books) && json.books.length) {
+        // map backend books into the shape ResultsPage expects
+        finalBooks = json.books.map(b => ({
+          Title: b.title || '',
+          Author: b.author || '',
+          ISBN: b.isbn || '',
+          'Course Code': (json.course && json.course.code) || courseCode,
+          'Required or Supplemental': b.isRequired ? 'Required' : 'Recommended',
+          Notes: ''
+        }));
+      }
+
+      navigate('/results', {
+        state: {
+          student: formData,   // { name, dorm, classType, teacher, class }
+          books: finalBooks,   // unified shape, from backend or CSV fallback
+          dormStores,
+          onlineUrl,
+          isLanguage
+        }
+      });
+    } catch (err) {
+      console.error('[FindBooks] search error:', err);
+      alert('Something went wrong while searching. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // these helpers aren’t used on this page anymore for rendering, keep them to avoid future breakage:
   const getPhysicalBooks = () => {
     const books = getBooksForClass();
     return books.filter(b =>
@@ -228,24 +285,9 @@ const HomePage = () => {
     return books.every(b => (!b.Title || !b.Title.trim()) && (!b.Author || !b.Author.trim()));
   };
 
-  const getBookstoresForDorm = () => dormBookstores[formData.dorm] || [];
-
-  // these helpers aren’t used on this page anymore (we render them on /results), keep them and silence eslint:
   void getPhysicalBooks;
   void hasNoBooks;
   void getBookstoresForDorm;
-
-  // build an Online link for the class, if any — becomes a fake "store" LAST
-  const getOnlineUrlForClass = () => {
-    const digital = getDigitalBooks();
-    if (!digital.length) return null;
-    for (const b of digital) {
-      if (b['Digital?'] && b['Digital?'].startsWith('http')) return b['Digital?'];
-      if (b['First year/Notes'] && b['First year/Notes'].startsWith('http')) return b['First year/Notes'];
-    }
-    const hasBrightspaceNote = digital.some(b => (b.Notes || '').toLowerCase().includes('brightspace') || (b.Notes || '').toLowerCase().includes('brightspacce'));
-    return hasBrightspaceNote ? 'https://brightspace.nyu.edu' : null;
-  };
 
   // -------------- UI ----------------
   return (

@@ -1,32 +1,48 @@
-<<<<<<< HEAD
+# ======================
+# Dependencies
+# ======================
 node_modules/
-.env
-.DS_Store
-*.log
-dist/
+
+# ======================
+# Build output
+# ======================
 build/
-=======
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+dist/
+frontend/build/
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
+# ======================
+# Environment variables
+# ======================
+.env
+.env.*
+!.env.example
 
-# testing
-/coverage
-
-# production
-/build
-
-# misc
-.DS_Store
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
+# ======================
+# Logs
+# ======================
+*.log
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
->>>>>>> 7342f58 (update spring course catalogue)
+pnpm-debug.log*
+
+# ======================
+# OS / IDE
+# ======================
+.DS_Store
+.vscode/
+.idea/
+
+# ======================
+# AWS / Amplify
+# ======================
+.amplify-hosting/
+amplify/#current-cloud-backend/
+amplify/.config/
+
+# ======================
+# Python (safety)
+# ======================
+venv/
+__pycache__/
+*.pyc
+

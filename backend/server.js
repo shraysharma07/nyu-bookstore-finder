@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const { pool } = require('./db');
+
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
 
@@ -16,7 +17,7 @@ if (process.env.NODE_ENV === 'production') {
 // ✅ strict CORS for production, but dev-friendly
 const rawAllowed = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
-  .map(s => s.trim())
+  .map((s) => s.trim())
   .filter(Boolean);
 
 const defaultDevOrigins = ['http://localhost:3000'];
@@ -47,7 +48,7 @@ app.options('*', cors(corsOptions));
 
 app.use(express.json());
 
-// ✅ verify DB on boot
+// ✅ verify DB on boot (non-fatal)
 (async () => {
   try {
     await pool.query('SELECT 1');
@@ -57,17 +58,32 @@ app.use(express.json());
   }
 })();
 
-// ✅ Routes
+// ----------------------------------------------------
+// Basic endpoints
+// ----------------------------------------------------
+app.get('/', (_req, res) => {
+  res.status(200).send('ok');
+});
+
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({ ok: true });
+});
+
+// ✅ EB health check (keep)
+app.get('/health', (_req, res) => res.status(200).json({ ok: true }));
+
+// ----------------------------------------------------
+// ✅ API Routes (MUST be mounted before catch-all)
+// ----------------------------------------------------
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/catalog', require('./routes/catalog'));
+app.use('/api/books', require('./routes/books'));
+app.use('/api/bookstores', require('./routes/bookstores'));
+app.use('/api/students', require('./routes/students'));
 
-// ❌ books route disabled until fixed
-// app.use('/api/books', require('./routes/books'));
-
-// ✅ EB health check (THIS NAME MATTERS)
-app.get('/health', (req, res) => res.status(200).json({ ok: true }));
-
-// ✅ Catch-all
+// ----------------------------------------------------
+// Catch-all 404 (KEEP LAST)
+// ----------------------------------------------------
 app.use('*', (_req, res) => res.status(404).json({ error: 'Route not found' }));
 
 app.listen(PORT, () => console.log(`API running → http://localhost:${PORT}`));

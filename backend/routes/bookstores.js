@@ -1,5 +1,5 @@
 const express = require('express');
-const { pool } = require('../server');
+const { pool } = require('../db');
 
 const router = express.Router();
 
@@ -64,7 +64,14 @@ router.get('/search', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error searching bookstores:', error);
+    console.error('[bookstores] Error searching bookstores:', {
+      dorm: req.query?.dorm,
+      course: req.query?.course,
+      professor: req.query?.professor,
+      error: error.message,
+      stack: error.stack,
+      sqlError: error.code || error.detail || null
+    });
     res.status(500).json({ error: 'Server error searching bookstores' });
   }
 });
@@ -95,7 +102,12 @@ router.get('/near/:dormName', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching nearby bookstores:', error);
+    console.error('[bookstores] Error fetching nearby bookstores:', {
+      dormName: req.params?.dormName,
+      error: error.message,
+      stack: error.stack,
+      sqlError: error.code || error.detail || null
+    });
     res.status(500).json({ error: 'Server error fetching bookstores' });
   }
 });
@@ -111,7 +123,11 @@ router.get('/dorms', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching dorms:', error);
+    console.error('[bookstores] Error fetching dorms:', {
+      error: error.message,
+      stack: error.stack,
+      sqlError: error.code || error.detail || null
+    });
     res.status(500).json({ error: 'Server error fetching dorms' });
   }
 });
@@ -137,7 +153,11 @@ router.get('/courses', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching courses:', error);
+    console.error('[bookstores] Error fetching courses:', {
+      error: error.message,
+      stack: error.stack,
+      sqlError: error.code || error.detail || null
+    });
     res.status(500).json({ error: 'Server error fetching courses' });
   }
 });

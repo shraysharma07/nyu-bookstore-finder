@@ -1,4 +1,4 @@
-// server.js
+// backend/server.js
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
@@ -14,18 +14,18 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
-// ✅ strict CORS for production, but dev-friendly
+// ✅ strict CORS for production, dev-friendly in dev
 const rawAllowed = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
 
-const defaultDevOrigins = ['http://localhost:3000'];
+const defaultDevOrigins = ['http://localhost:3000', 'http://localhost:3001'];
 
 const allowedOrigins =
   process.env.NODE_ENV === 'production'
     ? rawAllowed
-    : [...rawAllowed, ...defaultDevOrigins];
+    : [...new Set([...rawAllowed, ...defaultDevOrigins])];
 
 console.log('[CORS] allowed origins:', allowedOrigins);
 
@@ -42,11 +42,19 @@ const corsOptions = {
   credentials: true,
 };
 
-// 🔥 apply CORS to all routes + handle preflight
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
 app.use(express.json());
+
+// Basic root
+app.get('/', (_req, res) => res.status(200).send('ok'));
+
+// API health
+app.get('/api/health', (_req, res) => res.status(200).json({ ok: true }));
+
+// ✅ EB health check endpoint
+app.get('/health', (_req, res) => res.status(200).json({ ok: true }));
 
 // ✅ verify DB on boot (non-fatal)
 (async () => {
@@ -58,32 +66,14 @@ app.use(express.json());
   }
 })();
 
-// ----------------------------------------------------
-// Basic endpoints
-// ----------------------------------------------------
-app.get('/', (_req, res) => {
-  res.status(200).send('ok');
-});
-
-app.get('/api/health', (_req, res) => {
-  res.status(200).json({ ok: true });
-});
-
-// ✅ EB health check (keep)
-app.get('/health', (_req, res) => res.status(200).json({ ok: true }));
-
-// ----------------------------------------------------
-// ✅ API Routes (MUST be mounted before catch-all)
-// ----------------------------------------------------
+// ✅ Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/catalog', require('./routes/catalog'));
 app.use('/api/books', require('./routes/books'));
-app.use('/api/bookstores', require('./routes/bookstores'));
 app.use('/api/students', require('./routes/students'));
+app.use('/api/bookstores', require('./routes/bookstores'));
 
-// ----------------------------------------------------
-// Catch-all 404 (KEEP LAST)
-// ----------------------------------------------------
+// ✅ Catch-all
 app.use('*', (_req, res) => res.status(404).json({ error: 'Route not found' }));
 
 app.listen(PORT, () => console.log(`API running → http://localhost:${PORT}`));

@@ -43,7 +43,13 @@ async function verifyDbUser(username, password) {
     return ok ? { id: rows[0].id, username: rows[0].username } : false;
   } catch (e) {
     // DB down or not ready: silently fall back to env auth
-    if (AUTH_DEBUG && !isProd) console.warn('[auth] DB check failed:', e.message);
+    console.error('[auth] DB check failed:', {
+      username,
+      error: e.message,
+      stack: e.stack,
+      sqlError: e.code || e.detail || null
+    });
+    if (AUTH_DEBUG && !isProd) console.warn('[auth] DB check failed (falling back to env):', e.message);
     return false;
   }
 }

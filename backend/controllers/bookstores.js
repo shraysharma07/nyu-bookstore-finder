@@ -1,6 +1,6 @@
 // backend/routes/bookstores.js
 const express = require('express');
-const { pool } = require('../server');
+const { pool } = require('../db');
 
 const router = express.Router();
 

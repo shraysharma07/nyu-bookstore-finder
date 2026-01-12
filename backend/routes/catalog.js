@@ -57,7 +57,11 @@ router.post('/upload', upload.single('catalog'), async (req, res) => {
       books: parsed.books,
     });
   } catch (err) {
-    console.error('[catalog] upload/parse error:', err);
+    console.error('[catalog] upload/parse error:', {
+      error: err.message,
+      stack: err.stack,
+      sqlError: err.code || err.detail || null
+    });
     if (tmpPath) safeUnlink(tmpPath);
     return res.status(500).json({ success: false, error: 'parse_failed' });
   }
@@ -331,7 +335,13 @@ async function saveToDatabase(data, { semester, year }) {
     );
   } catch (e) {
     await client.query('ROLLBACK');
-    console.error('[catalog] saveToDatabase error:', e);
+    console.error('[catalog] saveToDatabase error:', {
+      error: e.message,
+      stack: e.stack,
+      sqlError: e.code || e.detail || null,
+      semester,
+      year
+    });
     throw e;
   } finally {
     client.release();
@@ -356,7 +366,11 @@ router.get('/summary', async (_req, res) => {
       professors: Number(professorsResult.rows[0].count || 0)
     });
   } catch (e) {
-    console.error('[catalog] summary error:', e);
+    console.error('[catalog] summary error:', {
+      error: e.message,
+      stack: e.stack,
+      sqlError: e.code || e.detail || null
+    });
     res.status(500).json({ error: 'Failed to fetch summary' });
   }
 });

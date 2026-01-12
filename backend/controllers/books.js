@@ -1,6 +1,6 @@
 // backend/routes/books.js
 const express = require('express');
-const { pool } = require('../server');
+const { pool } = require('../db');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();

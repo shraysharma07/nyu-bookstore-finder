@@ -1,5 +1,5 @@
 const express = require('express');
-const { pool } = require('../server');
+const { pool } = require('../db');
 
 const router = express.Router();
 
@@ -117,7 +117,12 @@ router.post('/search', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error processing student search:', error);
+    console.error('[students] Error processing student search:', {
+      searchData: { name: req.body?.name, dorm: req.body?.dorm, course: req.body?.course },
+      error: error.message,
+      stack: error.stack,
+      sqlError: error.code || error.detail || null
+    });
     res.status(500).json({ error: 'Server error processing search' });
   }
 });
@@ -149,7 +154,13 @@ router.get('/popular-searches', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching popular searches:', error);
+    console.error('[students] Error fetching popular searches:', {
+      limit: req.query?.limit,
+      days: req.query?.days,
+      error: error.message,
+      stack: error.stack,
+      sqlError: error.code || error.detail || null
+    });
     res.status(500).json({ error: 'Server error fetching popular searches' });
   }
 });
@@ -177,7 +188,12 @@ router.get('/analytics/dorms', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching dorm analytics:', error);
+    console.error('[students] Error fetching dorm analytics:', {
+      days: req.query?.days,
+      error: error.message,
+      stack: error.stack,
+      sqlError: error.code || error.detail || null
+    });
     res.status(500).json({ error: 'Server error fetching dorm analytics' });
   }
 });

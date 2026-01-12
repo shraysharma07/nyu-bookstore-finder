@@ -15,7 +15,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // ✅ strict CORS for production, dev-friendly in dev
-const rawAllowed = (process.env.ALLOWED_ORIGINS || '')
+const rawAllowed = (process.env.CORS_ALLOWED_ORIGINS || '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
@@ -37,7 +37,7 @@ const corsOptions = {
     if (allowedOrigins.includes(origin)) return cb(null, true);
 
     console.error('[CORS] blocked origin:', origin);
-    return cb(new Error('CORS blocked: ' + origin));
+    return cb(null, false);
   },
   credentials: true,
 };

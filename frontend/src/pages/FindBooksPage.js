@@ -56,6 +56,7 @@ const HomePage = () => {
   });
   const [showBooks, setShowBooks] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [courseData, setCourseData] = useState([]);
   const [teacherMapping, setTeacherMapping] = useState(new Map());
   const booksRef = useRef(null);
@@ -224,6 +225,8 @@ const HomePage = () => {
     const isLanguage = /(^|\b)language(s)?(\b|$)/i.test((formData.classType || '').trim());
 
     setIsLoading(true);
+    setError(null); // Clear previous errors
+
     try {
       const payload = {
         course: courseCode,
@@ -231,6 +234,7 @@ const HomePage = () => {
         dorm: formData.dorm || undefined,
       };
 
+      console.log('[FindBooks] Calling API with payload:', payload);
       const json = await Api.searchBooks(payload);
       console.log('[FindBooks] backend search response:', json);
 
@@ -259,7 +263,22 @@ const HomePage = () => {
       });
     } catch (err) {
       console.error('[FindBooks] search error:', err);
-      alert('Something went wrong while searching. Please try again.');
+      
+      // Set user-friendly error message
+      let errorMessage = 'Something went wrong while searching. Please try again.';
+      
+      if (err.isTimeout) {
+        errorMessage = 'Request timed out. The server may be slow or unreachable. Please try again.';
+      } else if (err.isNetworkError) {
+        errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+      
+      // Also show alert for immediate feedback
+      alert(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -408,6 +427,34 @@ const HomePage = () => {
             >
               {isLoading ? 'Finding Books…' : 'Find My Books'}
             </button>
+            
+            {/* Error Display */}
+            {error && (
+              <div style={{
+                marginTop: '1rem',
+                padding: '1rem',
+                backgroundColor: '#fee2e2',
+                border: '1px solid #fca5a5',
+                borderRadius: '8px',
+                color: '#991b1b'
+              }}>
+                <strong>Error:</strong> {error}
+                <button
+                  onClick={() => setError(null)}
+                  style={{
+                    marginLeft: '1rem',
+                    padding: '0.25rem 0.5rem',
+                    backgroundColor: '#dc2626',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </section>

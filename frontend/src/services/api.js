@@ -1,76 +1,7 @@
 // frontend/src/services/api.js
+// Uses the production-safe apiClient with timeout and error handling
 
-// I normalize the base so I can call request('/auth/login') and it always hits /api.
-// Supports both REACT_APP_API_BASE_URL and REACT_APP_API_URL for flexibility.
-const RAW_BASE =
-  process.env.REACT_APP_API_BASE_URL ||
-  process.env.REACT_APP_API_URL ||
-  '';
-
-const API_BASE = RAW_BASE
-  ? (RAW_BASE.endsWith('/api') ? RAW_BASE : `${RAW_BASE.replace(/\/$/, '')}/api`)
-  : '/api'; // same-origin dev proxy
-console.log('[Api] API_BASE at runtime =', API_BASE);
-
-// tiny helpers i reuse everywhere
-const qs = (obj = {}) => {
-  const p = new URLSearchParams();
-  Object.entries(obj).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && v !== '') p.append(k, v);
-  });
-  return p.toString();
-};
-
-// i always try to return JSON so existing callers keep working
-async function requestJson(path, options = {}) {
-  const url = `${API_BASE}${path}`;
-  const res = await fetch(url, {
-    method: options.method || 'GET',
-    headers: {
-      Accept: 'application/json',
-      ...(options.headers || {}),
-      ...(options.json ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: options.json ? JSON.stringify(options.json) : options.body,
-    signal: options.signal,
-  });
-
-  let data;
-  try {
-    data = await res.json();
-  } catch {
-    data = { success: false, error: 'Invalid JSON response from server' };
-  }
-
-  // if backend sent a non-2xx without an error message, i add one
-  if (!res.ok && data && !data.error) {
-    data.error = `Request failed (${res.status})`;
-  }
-  return data;
-}
-
-// multipart upload (i don’t set Content-Type; browser sets boundary)
-async function postMultipart(path, formData, extraHeaders = {}) {
-  const url = `${API_BASE}${path}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      ...extraHeaders,
-    },
-    body: formData,
-  });
-  let data;
-  try {
-    data = await res.json();
-  } catch {
-    data = { success: false, error: 'Invalid JSON response from server' };
-  }
-  if (!res.ok && data && !data.error) {
-    data.error = `Request failed (${res.status})`;
-  }
-  return data;
-}
+import { requestJson, postMultipart, qs } from './apiClient';
 
 class ApiService {
   // i read the new token key we decided on

@@ -2,11 +2,11 @@
 // Production-safe API client with timeout, error handling, and proper base URL
 
 // Get API base URL from environment variables
-// Supports both REACT_APP_API_URL and REACT_APP_API_BASE_URL
-// In production (Amplify), set REACT_APP_API_URL to your EB URL
+// Supports VITE_API_BASE_URL (Vite), REACT_APP_API_URL (CRA), and REACT_APP_API_BASE_URL
+// In production (Amplify), set REACT_APP_API_URL or VITE_API_BASE_URL to your EB URL
 // In local dev, falls back to http://localhost:5000
 const getApiBaseUrl = () => {
-  const envUrl = process.env.REACT_APP_API_URL || process.env.REACT_APP_API_BASE_URL;
+  const envUrl = process.env.VITE_API_BASE_URL || process.env.REACT_APP_API_URL || process.env.REACT_APP_API_BASE_URL;
   
   if (envUrl) {
     // Remove trailing slash and ensure it doesn't already have /api

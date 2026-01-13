@@ -26,7 +26,9 @@ const LoginPage = ({ onLogin }) => {
     try {
       const json = await Api.login(username, password);
 
-      if (!json?.ok || !json?.token) throw new Error('login_failed');
+      if (!json?.ok || !json?.token) {
+        throw new Error(json?.error || 'login_failed');
+      }
 
       localStorage.setItem('nyu_token', json.token);
       localStorage.setItem('nyu_admin_name', username || 'Admin');
@@ -36,8 +38,24 @@ const LoginPage = ({ onLogin }) => {
       setStatus({ type: 'success', msg: 'Signed in' });
       navigate('/admin', { replace: true });
     } catch (err) {
-      console.error('Login error', err);
-      setStatus({ type: 'error', msg: 'Invalid username or password' });
+      console.error('[Login] Error:', err);
+      console.error('[Login] Error details:', {
+        message: err.message,
+        isTimeout: err.isTimeout,
+        isNetworkError: err.isNetworkError
+      });
+      
+      // Show specific error messages
+      let errorMsg = 'Invalid username or password';
+      if (err.isTimeout) {
+        errorMsg = 'Request timed out. Please try again.';
+      } else if (err.isNetworkError) {
+        errorMsg = 'Unable to connect to server. Please check your connection.';
+      } else if (err.message && err.message !== 'login_failed') {
+        errorMsg = err.message;
+      }
+      
+      setStatus({ type: 'error', msg: errorMsg });
     }
   };
 

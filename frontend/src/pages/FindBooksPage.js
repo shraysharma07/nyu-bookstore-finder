@@ -245,7 +245,17 @@ const HomePage = () => {
       };
 
       console.log('[FindBooks] Calling API with payload:', payload);
-      const json = await Api.searchBooks(payload);
+      console.log('[FindBooks] API base URL:', window.location.origin);
+      
+      // Add explicit timeout wrapper
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout')), 15000);
+      });
+      
+      const json = await Promise.race([
+        Api.searchBooks(payload),
+        timeoutPromise
+      ]);
       console.log('[FindBooks] backend search response:', json);
 
       let finalBooks = csvBooks;
@@ -273,13 +283,19 @@ const HomePage = () => {
       });
     } catch (err) {
       console.error('[FindBooks] search error:', err);
+      console.error('[FindBooks] Error details:', {
+        message: err.message,
+        isTimeout: err.isTimeout,
+        isNetworkError: err.isNetworkError,
+        stack: err.stack
+      });
       
       // Set user-friendly error message
       let errorMessage = 'Something went wrong while searching. Please try again.';
       
-      if (err.isTimeout) {
-        errorMessage = 'Request timed out. The server may be slow or unreachable. Please try again.';
-      } else if (err.isNetworkError) {
+      if (err.message === 'Request timeout' || err.isTimeout) {
+        errorMessage = 'Request timed out after 15 seconds. The server may be slow or unreachable. Please try again.';
+      } else if (err.isNetworkError || err.message.includes('fetch') || err.message.includes('Network')) {
         errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.';
       } else if (err.message) {
         errorMessage = err.message;
@@ -287,9 +303,11 @@ const HomePage = () => {
       
       setError(errorMessage);
       
-      // Also show alert for immediate feedback
-      alert(errorMessage);
+      // Log the API URL for debugging
+      const apiBase = process.env.REACT_APP_API_URL || process.env.REACT_APP_API_BASE_URL || 'not set';
+      console.error('[FindBooks] API base URL config:', apiBase);
     } finally {
+      // ALWAYS stop loading, even on error
       setIsLoading(false);
     }
   };

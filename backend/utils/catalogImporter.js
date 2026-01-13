@@ -24,10 +24,11 @@ async function importCatalog(data) {
   try {
     await client.query('BEGIN');
 
-    // 1) DELETE ALL existing catalog data (complete replacement)
-    // Delete in order to respect foreign key constraints
-    await client.query('DELETE FROM course_books');
-    await client.query('DELETE FROM courses');
+    // 1) TRUNCATE ALL existing catalog data (complete replacement)
+    // Use TRUNCATE CASCADE for guaranteed replacement with FK safety
+    // This is more efficient and ensures complete removal
+    await client.query('TRUNCATE TABLE course_books CASCADE');
+    await client.query('TRUNCATE TABLE courses CASCADE');
     // Note: We keep books table as it might be referenced by inventory
     // But we'll update/create books as needed
 

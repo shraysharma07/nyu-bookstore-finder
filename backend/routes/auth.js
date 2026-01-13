@@ -94,6 +94,57 @@ router.post('/login', async (req, res) => {
   return res.status(401).json({ ok: false, error: 'invalid_credentials' });
 });
 
+// Auth health check endpoint
+router.get('/health', async (_req, res) => {
+  try {
+    // Check if JWT_SECRET is configured
+    const hasSecret = Boolean(JWT_SECRET && JWT_SECRET !== 'please-change-this-secret');
+    
+    // Check if admin credentials are configured
+    const hasAdmin = Boolean(ADMIN_USERNAME && (ADMIN_PASSWORD_HASH || ADMIN_PASSWORD_PLAIN));
+    
+    // Test DB connection
+    let dbConnected = false;
+    try {
+      await pool.query('SELECT 1');
+      dbConnected = true;
+    } catch (e) {
+      // DB not connected
+    }
+    
+    res.json({
+      ok: true,
+      hasSecret,
+      hasAdmin,
+      dbConnected,
+      authMethod: ADMIN_PASSWORD_HASH ? 'hash' : 'plain',
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Auth "me" endpoint - verify current token
+router.get('/me', async (req, res) => {
+  try {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    
+    if (!token) {
+      return res.status(401).json({ ok: false, error: 'no_token' });
+    }
+    
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      return res.json({ ok: true, user: { id: decoded.sub, role: decoded.role } });
+    } catch (e) {
+      return res.status(401).json({ ok: false, error: 'invalid_token' });
+    }
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // (dev-only) show minimal expectations — disabled in production
 if (!isProd) {
   router.get('/_expected', (_req, res) => {

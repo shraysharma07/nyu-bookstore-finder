@@ -24,11 +24,19 @@ if (!filePath) {
   process.exit(1);
 }
 
-// Resolve file path
-const resolvedPath = path.resolve(filePath);
+// Resolve file path (support relative paths from repo root)
+let resolvedPath = path.resolve(filePath);
 if (!fs.existsSync(resolvedPath)) {
-  console.error(`Error: File not found: ${resolvedPath}`);
-  process.exit(1);
+  // Try relative to repo root
+  const repoRoot = path.resolve(__dirname, '../..');
+  const altPath = path.join(repoRoot, filePath);
+  if (fs.existsSync(altPath)) {
+    resolvedPath = altPath;
+  } else {
+    console.error(`Error: File not found: ${resolvedPath}`);
+    console.error(`Also tried: ${altPath}`);
+    process.exit(1);
+  }
 }
 
 // Main import function

@@ -7,6 +7,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "catalog:import": "node scripts/importCatalog.js",
+    "smoke:prod": "node scripts/smokeTests.js",
     "test": "jest --testTimeout=10000",
     "test:watch": "jest --watch"
   },

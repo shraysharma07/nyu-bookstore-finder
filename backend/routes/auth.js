@@ -2,8 +2,12 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const dotenv = require('dotenv');
-dotenv.config();
+
+// Only load .env in non-production
+if (process.env.NODE_ENV !== 'production') {
+  const dotenv = require('dotenv');
+  dotenv.config();
+}
 
 const { pool } = require('../db');
 

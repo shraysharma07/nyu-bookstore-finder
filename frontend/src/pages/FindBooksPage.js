@@ -130,8 +130,18 @@ const HomePage = () => {
   }, [processTeacherNames]);
 
   useEffect(() => {
+    // Always parse fresh CSV data on mount (no caching)
     parseCSVData(csvData);
   }, [parseCSVData]);
+
+  // Clear any cached catalog data on mount
+  useEffect(() => {
+    // Remove any old catalog cache keys if they exist
+    const cacheKeys = Object.keys(localStorage).filter(key => 
+      key.startsWith('catalog_') || key.startsWith('courses_') || key.startsWith('books_')
+    );
+    cacheKeys.forEach(key => localStorage.removeItem(key));
+  }, []);
 
   // --- dropdown helpers (unchanged logic) ---
   const getClassTypes = () => {

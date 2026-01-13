@@ -1,10 +1,12 @@
-// routes/catalog.js — Fall/Spring PDF parser for NYU Madrid book list
+// routes/catalog.js — Fall/Spring PDF parser + CSV importer for NYU Madrid book list
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const pdf = require('pdf-parse');
 const { pool } = require('../db');
+const { parseCSV } = require('../utils/csvParser');
+const { importCatalog } = require('../utils/catalogImporter');
 
 const router = express.Router();
 
@@ -16,13 +18,20 @@ const upload = multer({
   dest: uploadDir,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype === 'application/pdf') return cb(null, true);
-    cb(new Error('Only PDF files are allowed'));
+    // Accept PDF or CSV
+    if (file.mimetype === 'application/pdf' || 
+        file.mimetype === 'text/csv' ||
+        file.mimetype === 'application/vnd.ms-excel' ||
+        /\.(pdf|csv)$/i.test(file.originalname)) {
+      return cb(null, true);
+    }
+    cb(new Error('Only PDF or CSV files are allowed'));
   }
 });
 
 // ------------ MAIN ENDPOINT ------------
 // POST /api/catalog/upload
+// Supports both PDF and CSV uploads
 router.post('/upload', upload.single('catalog'), async (req, res) => {
   let tmpPath = req.file && req.file.path;
 
@@ -31,20 +40,56 @@ router.post('/upload', upload.single('catalog'), async (req, res) => {
       return res.status(400).json({ success: false, error: 'no_file' });
     }
 
-    const dataBuffer = fs.readFileSync(tmpPath);
-    const pdfData = await pdf(dataBuffer);
-    const text = String(pdfData && pdfData.text || '');
+    const isCSV = /\.csv$/i.test(req.file.originalname) || 
+                  req.file.mimetype === 'text/csv' ||
+                  req.file.mimetype === 'application/vnd.ms-excel';
 
-    const parsed = parseCatalogText(text);
+    let parsed;
+    let importSummary;
 
-    // save to DB (one semester at a time; delete+reinsert)
-    try {
+    if (isCSV) {
+      // CSV import path - replaces ALL catalog data
+      const csvContent = fs.readFileSync(tmpPath, 'utf8');
+      parsed = parseCSV(csvContent);
+
+      if (parsed.errors.length > 0) {
+        console.warn('[catalog] CSV parse warnings:', parsed.errors);
+      }
+
+      // Import to database (replaces all data)
+      importSummary = await importCatalog({
+        courses: parsed.courses,
+        books: parsed.books,
+      });
+
+      // Combine parse errors with import errors
+      importSummary.errors = [
+        ...parsed.errors.map(e => ({ row: e.rowNum, reason: e.reason })),
+        ...importSummary.errors,
+      ];
+    } else {
+      // PDF import path (legacy - semester/year based)
+      const dataBuffer = fs.readFileSync(tmpPath);
+      const pdfData = await pdf(dataBuffer);
+      const text = String(pdfData && pdfData.text || '');
+
+      parsed = parseCatalogText(text);
+
+      // save to DB (one semester at a time; delete+reinsert)
       await saveToDatabase(parsed, {
         semester: process.env.CATALOG_SEMESTER || 'Fall',
         year: Number(process.env.CATALOG_YEAR) || 2025,
       });
-    } catch (dbErr) {
-      console.warn('[catalog] saveToDatabase failed (continuing):', dbErr.message);
+
+      importSummary = {
+        coursesCreated: parsed.courses.length,
+        coursesUpdated: 0,
+        booksCreated: parsed.books.length,
+        booksUpdated: 0,
+        relationshipsCreated: parsed.books.length,
+        duplicatesSkipped: 0,
+        errors: [],
+      };
     }
 
     safeUnlink(tmpPath);
@@ -53,8 +98,9 @@ router.post('/upload', upload.single('catalog'), async (req, res) => {
     return res.json({
       success: true,
       courses: parsed.courses,
-      professors: parsed.professors,
+      professors: parsed.professors || [],
       books: parsed.books,
+      summary: importSummary,
     });
   } catch (err) {
     console.error('[catalog] upload/parse error:', {
@@ -63,7 +109,75 @@ router.post('/upload', upload.single('catalog'), async (req, res) => {
       sqlError: err.code || err.detail || null
     });
     if (tmpPath) safeUnlink(tmpPath);
-    return res.status(500).json({ success: false, error: 'parse_failed' });
+    return res.status(500).json({ 
+      success: false, 
+      error: 'parse_failed',
+      message: err.message 
+    });
+  }
+});
+
+// CSV import endpoint (for scripted imports)
+// POST /api/catalog/import-csv
+// Body: { filePath: '/path/to/file.csv' } OR multipart file upload
+router.post('/import-csv', upload.single('catalog'), async (req, res) => {
+  let tmpPath = req.file && req.file.path;
+  let csvPath = req.body?.filePath;
+
+  try {
+    // Support both file upload and file path
+    if (!tmpPath && !csvPath) {
+      return res.status(400).json({ success: false, error: 'no_file_or_path' });
+    }
+
+    const filePath = tmpPath || csvPath;
+    if (!fs.existsSync(filePath)) {
+      return res.status(400).json({ success: false, error: 'file_not_found' });
+    }
+
+    const csvContent = fs.readFileSync(filePath, 'utf8');
+    const parsed = parseCSV(csvContent);
+
+    if (parsed.errors.length > 0) {
+      console.warn('[catalog] CSV parse warnings:', parsed.errors);
+    }
+
+    // Import to database (replaces all data)
+    const importSummary = await importCatalog({
+      courses: parsed.courses,
+      books: parsed.books,
+    });
+
+    // Combine errors
+    importSummary.errors = [
+      ...parsed.errors.map(e => ({ row: e.rowNum, reason: e.reason })),
+      ...importSummary.errors,
+    ];
+
+    if (tmpPath) {
+      safeUnlink(tmpPath);
+    }
+
+    return res.json({
+      success: true,
+      summary: importSummary,
+      parsed: {
+        courses: parsed.courses.length,
+        books: parsed.books.length,
+      },
+    });
+  } catch (err) {
+    console.error('[catalog] CSV import error:', {
+      error: err.message,
+      stack: err.stack,
+      sqlError: err.code || err.detail || null
+    });
+    if (tmpPath) safeUnlink(tmpPath);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'import_failed',
+      message: err.message 
+    });
   }
 });
 

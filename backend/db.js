@@ -1,7 +1,11 @@
 // db.js — single PG pool used everywhere
 const { Pool } = require('pg');
-const dotenv = require('dotenv');
-dotenv.config();
+
+// Only load .env in non-production
+if (process.env.NODE_ENV !== 'production') {
+  const dotenv = require('dotenv');
+  dotenv.config();
+}
 
 const pick = (keys, env = process.env) =>
   keys.find((k) => env[k] && env[k].length > 0) || null;

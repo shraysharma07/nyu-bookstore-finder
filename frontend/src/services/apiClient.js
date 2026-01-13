@@ -62,16 +62,23 @@ async function requestJson(path, options = {}) {
 
   const url = `${API_BASE}${path}`;
   
+  // Add cache-busting for GET requests in production
+  const cacheHeaders = process.env.NODE_ENV === 'production' && options.method === 'GET'
+    ? { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+    : {};
+  
   try {
     const res = await fetch(url, {
       method: options.method || 'GET',
       headers: {
         Accept: 'application/json',
+        ...cacheHeaders,
         ...(options.headers || {}),
         ...(options.json ? { 'Content-Type': 'application/json' } : {}),
       },
       body: options.json ? JSON.stringify(options.json) : options.body,
       signal: finalSignal,
+      cache: 'no-store', // Prevent browser caching
     });
 
     clearTimeout(timeoutId);

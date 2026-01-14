@@ -2,11 +2,12 @@
 // Production-safe API client with timeout, error handling, and proper base URL
 
 // Get API base URL from environment variables
-// Supports VITE_API_BASE_URL (Vite), REACT_APP_API_URL (CRA), and REACT_APP_API_BASE_URL
-// In production (Amplify), set REACT_APP_API_URL or VITE_API_BASE_URL to your EB URL
+// CRA uses REACT_APP_* env vars (NOT VITE_*)
+// In production (Amplify), set REACT_APP_API_URL to your EB URL (use http:// not https://)
 // In local dev, falls back to http://localhost:5000
 const getApiBaseUrl = () => {
-  const envUrl = process.env.VITE_API_BASE_URL || process.env.REACT_APP_API_URL || process.env.REACT_APP_API_BASE_URL;
+  // CRA uses REACT_APP_* prefix (NOT VITE_*)
+  const envUrl = process.env.REACT_APP_API_URL || process.env.REACT_APP_API_BASE_URL;
   
   if (envUrl) {
     // Remove trailing slash and ensure it doesn't already have /api
@@ -19,9 +20,10 @@ const getApiBaseUrl = () => {
     return 'http://localhost:5000/api';
   }
   
-  // Production fallback (shouldn't happen if env var is set)
-  console.warn('[apiClient] No API URL configured, using same-origin');
-  return '/api';
+  // Production fallback to EB URL (http:// not https://)
+  const defaultProdUrl = 'http://bookmap-api-dev.eba-2v9jbzmr.eu-west-1.elasticbeanstalk.com/api';
+  console.warn('[apiClient] No REACT_APP_API_URL configured, using default:', defaultProdUrl);
+  return defaultProdUrl;
 };
 
 const API_BASE = getApiBaseUrl();

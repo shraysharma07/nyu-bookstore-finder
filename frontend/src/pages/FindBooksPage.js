@@ -238,19 +238,28 @@ const HomePage = () => {
     setError(null); // Clear previous errors
 
     try {
-      // Send payload: { dorm, course, professor, name } (name optional)
+      // Send payload format that backend DEFINITELY accepts:
+      // { name, dorm, course } (name defaults to "Student" if not provided)
+      // Include professor if selected
       const payload = {
+        name: formData.name || 'Student',
         dorm: formData.dorm,
         course: courseCode,
-        professor: formData.teacher || undefined,
-        ...(formData.name ? { name: formData.name } : {})
+        ...(formData.teacher ? { professor: formData.teacher } : {})
       };
 
       console.log('[FindBooks] Calling API with payload:', payload);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[FindBooks] API base URL:', process.env.REACT_APP_API_URL || 'not set (using default)');
+      }
       
       // Use Api.searchBooks which has timeout built-in (15s from apiClient)
       const json = await Api.searchBooks(payload);
       console.log('[FindBooks] backend search response:', json);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[FindBooks] Response status: OK, requiredBooks:', json.requiredBooks?.length || 0);
+      }
 
       let finalBooks = csvBooks;
 
@@ -283,18 +292,23 @@ const HomePage = () => {
       console.error('[FindBooks] Error details:', {
         message: err.message,
         status: err.status,
+        statusCode: err.status,
         isTimeout: err.isTimeout,
         isNetworkError: err.isNetworkError,
-        stack: err.stack
+        data: err.data,
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
       });
       
       // Set user-friendly error message
       let errorMessage = 'Something went wrong while searching. Please try again.';
       
       if (err.status === 400) {
-        errorMessage = err.message || 'Invalid search parameters. Please check your input.';
+        errorMessage = err.data?.message || err.message || 'Invalid search parameters. Please check your input.';
+        if (err.data?.error === 'Validation error') {
+          errorMessage = err.data.message || 'Please check your input and try again.';
+        }
       } else if (err.status === 503) {
-        errorMessage = 'Catalog data is not available. Please try again later.';
+        errorMessage = err.data?.message || 'Catalog data is not available. Please try again later.';
       } else if (err.status === 504) {
         errorMessage = 'Request timed out. Please try again.';
       } else if (err.isTimeout || err.message?.includes('timeout')) {
@@ -306,13 +320,12 @@ const HomePage = () => {
       }
       
       setError(errorMessage);
-      setIsLoading(false); // Stop spinner on error
       
       // Log the API URL for debugging
-      const apiBase = process.env.REACT_APP_API_URL || process.env.REACT_APP_API_BASE_URL || process.env.VITE_API_BASE_URL || 'not set';
+      const apiBase = process.env.REACT_APP_API_URL || 'not set (using default)';
       console.error('[FindBooks] API base URL config:', apiBase);
     } finally {
-      // ALWAYS stop loading
+      // ALWAYS stop loading, even on error
       setIsLoading(false);
     }
   };

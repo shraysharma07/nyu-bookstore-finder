@@ -42,7 +42,7 @@ router.post('/search', async (req, res) => {
       if (!course) missingFields.push('course');
       
       console.log(`[students/search] ${requestId} VALIDATION_ERROR ${elapsed}ms`, {
-        receivedKeys,
+        bodyKeys: receivedKeys,
         missingFields,
         error: 'dorm and course are required'
       });

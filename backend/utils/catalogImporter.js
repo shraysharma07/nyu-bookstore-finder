@@ -4,6 +4,7 @@
 // Atomic: uses transaction to ensure all-or-nothing import
 
 const { pool } = require('../db');
+const { normalizeCourseCode } = require('./normalize');
 
 /**
  * Import catalog data and replace ALL existing catalog data (atomic transaction)
@@ -58,42 +59,51 @@ async function importCatalog(data) {
         continue;
       }
 
-      // Sanitize course code (already normalized by parser, but double-check)
-      const sanitizedCode = course.code.trim().replace(/\s+/g, ' ').replace(/\s*\.\s*/g, '.').toUpperCase();
+      // Normalize course code for consistent matching
+      const normalizedCode = normalizeCourseCode(course.code);
+      const displayCode = course.code.trim(); // Keep original for display
       
-      const subjectCode = sanitizedCode.split('-')[0];
+      const subjectCode = normalizedCode.split(' ')[0]; // Subject is first part (before space)
       const subjectId = subjectCode ? subjectMap[subjectCode] : null;
 
-      // Check if course exists (by code + professor + semester + year)
+      // Check if course exists (by code_normalized + professor + semester + year, or code if code_normalized doesn't exist)
       const existing = await client.query(
-        'SELECT id FROM courses WHERE code = $1 AND (professor = $2 OR ($2 IS NULL AND professor IS NULL)) AND (semester = $3 OR ($3 IS NULL AND semester IS NULL)) AND (year = $4 OR ($4 IS NULL AND year IS NULL))',
-        [sanitizedCode, course.professor || null, course.semester || null, course.year || null]
+        `SELECT id FROM courses 
+         WHERE (code_normalized = $1 OR (code_normalized IS NULL AND code = $5))
+           AND (professor = $2 OR ($2 IS NULL AND professor IS NULL))
+           AND (semester = $3 OR ($3 IS NULL AND semester IS NULL))
+           AND (year = $4 OR ($4 IS NULL AND year IS NULL))
+         LIMIT 1`,
+        [normalizedCode, course.professor || null, course.semester || null, course.year || null, displayCode]
       );
 
       if (existing.rows[0]) {
-        // Update existing
+        // Update existing (set code_normalized if not set)
         await client.query(
-          'UPDATE courses SET name = $1, subject_id = $2 WHERE id = $3',
-          [course.name || sanitizedCode, subjectId, existing.rows[0].id]
+          `UPDATE courses 
+           SET name = $1, subject_id = $2, code_normalized = COALESCE(code_normalized, $4)
+           WHERE id = $3`,
+          [course.name || displayCode, subjectId, existing.rows[0].id, normalizedCode]
         );
-        courseIdByCode[sanitizedCode] = existing.rows[0].id;
+        courseIdByCode[course.code] = existing.rows[0].id;
         summary.coursesUpdated++;
       } else {
-        // Insert new
+        // Insert new (with code_normalized)
         const r = await client.query(
-          `INSERT INTO courses (code, name, professor, subject_id, semester, year)
-           VALUES ($1, $2, $3, $4, $5, $6)
+          `INSERT INTO courses (code, code_normalized, name, professor, subject_id, semester, year)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING id`,
           [
-            sanitizedCode,
-            course.name || sanitizedCode,
+            displayCode,
+            normalizedCode,
+            course.name || displayCode,
             course.professor || null,
             subjectId,
             course.semester || null,
             course.year || null,
           ]
         );
-        courseIdByCode[sanitizedCode] = r.rows[0].id;
+        courseIdByCode[course.code] = r.rows[0].id;
         summary.coursesCreated++;
       }
     }

@@ -1,5 +1,6 @@
 const express = require('express');
 const { pool } = require('../db');
+const { normalizeCourseCode } = require('../utils/normalize');
 
 const router = express.Router();
 
@@ -18,27 +19,44 @@ router.post('/search', async (req, res) => {
   const startTime = Date.now();
   const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   
-  // Log request start
+  // Log request start (log received keys only, not sensitive values)
+  const receivedKeys = Object.keys(req.body || {});
   console.log(`[students/search] ${requestId} START`, {
-    body: {
-      name: req.body?.name ? `${req.body.name.substring(0, 3)}***` : null,
-      dorm: req.body?.dorm,
-      course: req.body?.course,
-      professor: req.body?.professor
-    },
+    bodyKeys: receivedKeys,
     ip: req.ip || req.connection.remoteAddress,
     origin: req.headers.origin || req.headers.host
   });
 
   try {
+    // Support BOTH payload formats for backwards compatibility:
+    // Format 1: { name, dorm, course }
+    // Format 2: { dorm, course, professor } (professor optional)
     const { name, dorm, course, professor } = req.body;
     const ipAddress = req.ip || req.connection.remoteAddress;
 
-    if (!name || !dorm || !course) {
+    // Validation: require dorm and course (name and professor are optional)
+    if (!dorm || !course) {
       const elapsed = Date.now() - startTime;
-      console.log(`[students/search] ${requestId} VALIDATION_ERROR ${elapsed}ms`);
-      return res.status(400).json({ error: 'Name, dorm, and course are required' });
+      const missingFields = [];
+      if (!dorm) missingFields.push('dorm');
+      if (!course) missingFields.push('course');
+      
+      console.log(`[students/search] ${requestId} VALIDATION_ERROR ${elapsed}ms`, {
+        receivedKeys,
+        missingFields,
+        error: 'dorm and course are required'
+      });
+      
+      return res.status(400).json({ 
+        error: 'Validation error',
+        message: 'dorm and course are required',
+        missingFields 
+      });
     }
+
+    // Normalize course code for matching
+    const normalizedCourse = normalizeCourseCode(course);
+    const studentName = name || 'Student';
 
     // Quick check: if courses table is empty, return 503 immediately
     try {
@@ -71,34 +89,66 @@ router.post('/search', async (req, res) => {
           console.log(`[students/search] ${requestId} STEP1: dorm lookup ${step1Time}ms`);
           
           if (dormResult.rows.length === 0) {
-            return res.status(400).json({ error: 'Invalid dorm name' });
+            return res.status(400).json({ 
+              error: 'Validation error',
+              message: 'Invalid dorm name',
+              field: 'dorm',
+              value: dorm
+            });
           }
           const dormId = dormResult.rows[0].id;
 
-          // Step 2: Get course ID
+          // Step 2: Get course ID using normalized course code
           const step2Start = Date.now();
-          let courseQuery = 'SELECT id FROM courses WHERE code = $1';
-          let courseParams = [course];
           
-          if (professor) {
-            courseQuery += ' AND professor = $2';
-            courseParams.push(professor);
+          // Try to find course using code_normalized first, fallback to code if column doesn't exist
+          let courseQuery = `
+            SELECT id, code 
+            FROM courses 
+            WHERE code_normalized = $1
+          `;
+          let courseParams = [normalizedCourse];
+          
+          // Normalize professor for matching (optional)
+          const normalizedProfessor = professor ? professor.trim().replace(/\s+/g, ' ') : null;
+          
+          if (normalizedProfessor) {
+            courseQuery += ' AND (professor = $2 OR professor IS NULL OR LOWER(TRIM(professor)) = LOWER($2))';
+            courseParams.push(normalizedProfessor);
           }
 
-          const courseResult = await pool.query(courseQuery, courseParams);
+          let courseResult = await pool.query(courseQuery, courseParams);
+          
+          // Fallback: if code_normalized column doesn't exist, try using code directly (normalized)
+          if (courseResult.rows.length === 0) {
+            const fallbackQuery = `
+              SELECT id, code 
+              FROM courses 
+              WHERE UPPER(TRIM(REPLACE(REPLACE(code, '.', ' '), '-', ' '))) = $1
+            `;
+            courseResult = await pool.query(fallbackQuery, [normalizedCourse]);
+          }
+          
           const step2Time = Date.now() - step2Start;
-          console.log(`[students/search] ${requestId} STEP2: course lookup ${step2Time}ms`);
+          console.log(`[students/search] ${requestId} STEP2: course lookup ${step2Time}ms (normalized: ${normalizedCourse}, professor: ${normalizedProfessor || 'none'})`);
           
           if (courseResult.rows.length === 0) {
-            return res.status(400).json({ error: 'Invalid course or professor' });
+            return res.status(400).json({ 
+              error: 'Validation error',
+              message: 'Invalid course or professor',
+              field: 'course',
+              value: course,
+              professor: professor || null
+            });
           }
           const courseId = courseResult.rows[0].id;
+          const matchedCourseCode = courseResult.rows[0].code;
 
           // Step 3: Log the search (async, don't wait)
           const step3Start = Date.now();
           pool.query(
             'INSERT INTO student_searches (student_name, dorm_id, course_id, ip_address) VALUES ($1, $2, $3, $4)',
-            [name, dormId, courseId, ipAddress]
+            [studentName, dormId, courseId, ipAddress]
           ).catch(err => console.error(`[students/search] ${requestId} Log insert error:`, err.message));
           const step3Time = Date.now() - step3Start;
           console.log(`[students/search] ${requestId} STEP3: log search ${step3Time}ms`);
@@ -121,6 +171,10 @@ router.post('/search', async (req, res) => {
           `, [courseId]);
           const step4Time = Date.now() - step4Start;
           console.log(`[students/search] ${requestId} STEP4: books query ${step4Time}ms (${booksResult.rows.length} books)`);
+
+          // Separate required and optional books
+          const requiredBooks = booksResult.rows.filter(b => b.is_required);
+          const optionalBooks = booksResult.rows.filter(b => !b.is_required);
 
           // Step 5: Get bookstores with inventory in ONE optimized query (eliminates N+1)
           const step5Start = Date.now();
@@ -189,15 +243,26 @@ router.post('/search', async (req, res) => {
 
           const totalTime = Date.now() - startTime;
           console.log(`[students/search] ${requestId} SUCCESS ${totalTime}ms`, {
-            books: booksResult.rows.length,
+            requiredBooks: requiredBooks.length,
+            optionalBooks: optionalBooks.length,
             bookstores: detailedBookstores.length
           });
 
+          // Return response with both requiredBooks and books (for backwards compatibility)
           return res.json({
-            success: true,
-            student: { name, dorm, course, professor },
-            requiredBooks: booksResult.rows,
-            bookstores: detailedBookstores
+            ok: true,
+            success: true, // Also include for backwards compatibility
+            requiredBooks: requiredBooks,
+            optionalBooks: optionalBooks,
+            books: requiredBooks, // Alias for backwards compatibility
+            bookstores: detailedBookstores,
+            meta: {
+              normalizedCourse,
+              matchedCourseCode,
+              courseId,
+              studentName,
+              professor: normalizedProfessor || null
+            }
           });
         } catch (stepError) {
           console.error(`[students/search] ${requestId} STEP_ERROR:`, {
@@ -226,11 +291,7 @@ router.post('/search', async (req, res) => {
     }
 
     console.error(`[students/search] ${requestId} ERROR ${elapsed}ms`, {
-      searchData: { 
-        name: req.body?.name ? `${req.body.name.substring(0, 3)}***` : null, 
-        dorm: req.body?.dorm, 
-        course: req.body?.course 
-      },
+      receivedKeys: Object.keys(req.body || {}),
       error: error.message,
       stack: process.env.NODE_ENV === 'production' ? undefined : error.stack,
       sqlError: error.code || error.detail || null

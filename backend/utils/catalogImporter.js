@@ -1,11 +1,12 @@
 // backend/utils/catalogImporter.js
 // Production-ready catalog importer that replaces ALL catalog data
 // Idempotent: running twice produces the same result
+// Atomic: uses transaction to ensure all-or-nothing import
 
 const { pool } = require('../db');
 
 /**
- * Import catalog data and replace ALL existing catalog data
+ * Import catalog data and replace ALL existing catalog data (atomic transaction)
  * @param {Object} data - { courses: [], books: [] }
  * @returns {Object} Import summary with counts and errors
  */
@@ -24,9 +25,8 @@ async function importCatalog(data) {
   try {
     await client.query('BEGIN');
 
-    // 1) TRUNCATE ALL existing catalog data (complete replacement)
+    // 1) TRUNCATE ALL existing catalog data (complete replacement, atomic)
     // Use TRUNCATE CASCADE for guaranteed replacement with FK safety
-    // This is more efficient and ensures complete removal
     await client.query('TRUNCATE TABLE course_books CASCADE');
     await client.query('TRUNCATE TABLE courses CASCADE');
     // Note: We keep books table as it might be referenced by inventory
@@ -50,7 +50,7 @@ async function importCatalog(data) {
       subjectMap[subject] = r.rows[0].id;
     }
 
-    // 3) Insert/update courses
+    // 3) Insert/update courses (sanitized course codes)
     const courseIdByCode = {};
     for (const course of data.courses) {
       if (!course.code) {
@@ -58,22 +58,25 @@ async function importCatalog(data) {
         continue;
       }
 
-      const subjectCode = course.code.split('-')[0];
+      // Sanitize course code (already normalized by parser, but double-check)
+      const sanitizedCode = course.code.trim().replace(/\s+/g, ' ').replace(/\s*\.\s*/g, '.').toUpperCase();
+      
+      const subjectCode = sanitizedCode.split('-')[0];
       const subjectId = subjectCode ? subjectMap[subjectCode] : null;
 
       // Check if course exists (by code + professor + semester + year)
       const existing = await client.query(
         'SELECT id FROM courses WHERE code = $1 AND (professor = $2 OR ($2 IS NULL AND professor IS NULL)) AND (semester = $3 OR ($3 IS NULL AND semester IS NULL)) AND (year = $4 OR ($4 IS NULL AND year IS NULL))',
-        [course.code, course.professor || null, course.semester || null, course.year || null]
+        [sanitizedCode, course.professor || null, course.semester || null, course.year || null]
       );
 
       if (existing.rows[0]) {
         // Update existing
         await client.query(
           'UPDATE courses SET name = $1, subject_id = $2 WHERE id = $3',
-          [course.name || course.code, subjectId, existing.rows[0].id]
+          [course.name || sanitizedCode, subjectId, existing.rows[0].id]
         );
-        courseIdByCode[course.code] = existing.rows[0].id;
+        courseIdByCode[sanitizedCode] = existing.rows[0].id;
         summary.coursesUpdated++;
       } else {
         // Insert new
@@ -82,15 +85,15 @@ async function importCatalog(data) {
            VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id`,
           [
-            course.code,
-            course.name || course.code,
+            sanitizedCode,
+            course.name || sanitizedCode,
             course.professor || null,
             subjectId,
             course.semester || null,
             course.year || null,
           ]
         );
-        courseIdByCode[course.code] = r.rows[0].id;
+        courseIdByCode[sanitizedCode] = r.rows[0].id;
         summary.coursesCreated++;
       }
     }
@@ -104,9 +107,16 @@ async function importCatalog(data) {
         continue;
       }
 
-      const courseId = courseIdByCode[book.courseCode];
+      // Find course code (sanitize to match what was inserted)
+      const sanitizedCourseCode = book.courseCode ? book.courseCode.trim().replace(/\s+/g, ' ').replace(/\s*\.\s*/g, '.').toUpperCase() : null;
+      const courseId = sanitizedCourseCode ? courseIdByCode[sanitizedCourseCode] : null;
+      
       if (!courseId) {
-        summary.errors.push({ type: 'book', reason: 'Course not found', courseCode: book.courseCode });
+        summary.errors.push({ 
+          type: 'book', 
+          reason: 'Course not found', 
+          courseCode: book.courseCode 
+        });
         continue;
       }
 
@@ -136,7 +146,7 @@ async function importCatalog(data) {
           summary.booksUpdated++;
         } else {
           // Get subject for book (from course)
-          const subjectCode = book.courseCode ? book.courseCode.split('-')[0] : null;
+          const subjectCode = sanitizedCourseCode ? sanitizedCourseCode.split('-')[0] : null;
           const subjectId = subjectCode ? subjectMap[subjectCode] : null;
 
           const ins = await client.query(
@@ -174,6 +184,11 @@ async function importCatalog(data) {
     return summary;
   } catch (e) {
     await client.query('ROLLBACK');
+    console.error('[catalogImporter] Transaction failed:', {
+      error: e.message,
+      stack: e.stack,
+      sqlError: e.code || e.detail || null
+    });
     throw e;
   } finally {
     client.release();

@@ -3,7 +3,7 @@
 // Handles Excel-style CSV with commas, quotes, BOMs, and uneven columns
 
 /**
- * Normalize header name (handle variations)
+ * Normalize header name (handle variations, trim whitespace, handle BOM)
  */
 function normalizeHeaderName(header) {
   if (!header) return '';
@@ -11,13 +11,13 @@ function normalizeHeaderName(header) {
   // Remove BOM if present
   let h = header.replace(/^\uFEFF/, '');
   
-  // Normalize to lowercase, remove spaces/punctuation
-  h = h.toLowerCase()
-    .trim()
-    .replace(/\s+/g, ' ')
-    .replace(/[^a-z0-9\s]/g, '');
+  // Trim whitespace
+  h = h.trim();
   
-  // Map common variations
+  // Normalize to lowercase, remove spaces/punctuation for matching
+  const normalized = h.toLowerCase().replace(/\s+/g, ' ').replace(/[^a-z0-9\s]/g, '');
+  
+  // Map common variations (case-insensitive, handles whitespace)
   const headerMap = {
     'course code': 'Course Code',
     'coursecode': 'Course Code',
@@ -40,19 +40,19 @@ function normalizeHeaderName(header) {
   };
   
   // Try exact match first
-  if (headerMap[h]) {
-    return headerMap[h];
+  if (headerMap[normalized]) {
+    return headerMap[normalized];
   }
   
   // Try partial matches
   for (const [key, value] of Object.entries(headerMap)) {
-    if (h.includes(key) || key.includes(h)) {
+    if (normalized.includes(key) || key.includes(normalized)) {
       return value;
     }
   }
   
-  // Return original if no match
-  return header.trim();
+  // Return original (trimmed) if no match
+  return h;
 }
 
 /**
@@ -78,9 +78,9 @@ function parseCSV(csvContent) {
 
   // Parse header with improved handling
   const headerLine = lines[0].line;
-  const rawHeaders = parseCSVLine(headerLine).map(h => h.trim());
+  const rawHeaders = parseCSVLine(headerLine).map(h => h.trim().replace(/^\uFEFF/, ''));
   
-  // Normalize headers
+  // Normalize headers (trim, handle BOM, normalize variations)
   const headers = rawHeaders.map(normalizeHeaderName);
   
   const expectedHeaders = [
@@ -92,9 +92,9 @@ function parseCSV(csvContent) {
   // Build header map (normalized names)
   const headerMap = {};
   headers.forEach((h, idx) => {
-    const normalized = h.toLowerCase().replace(/\s+/g, '');
+    const normalized = h.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
     expectedHeaders.forEach(expected => {
-      const expectedNorm = expected.toLowerCase().replace(/\s+/g, '');
+      const expectedNorm = expected.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
       if (normalized === expectedNorm || normalized.includes(expectedNorm) || expectedNorm.includes(normalized)) {
         headerMap[expected] = idx;
       }
@@ -104,9 +104,10 @@ function parseCSV(csvContent) {
   // Ensure we have at least Course Code (try multiple variations)
   if (headerMap['Course Code'] === undefined) {
     // Try to find it by searching raw headers
-    const courseCodeIdx = rawHeaders.findIndex(h => 
-      /course\s*code/i.test(h) || /coursecode/i.test(h)
-    );
+    const courseCodeIdx = rawHeaders.findIndex(h => {
+      const norm = h.toLowerCase().trim().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+      return /coursecode/i.test(norm) || norm.includes('coursecode');
+    });
     if (courseCodeIdx >= 0) {
       headerMap['Course Code'] = courseCodeIdx;
       headers[courseCodeIdx] = 'Course Code';
@@ -144,9 +145,9 @@ function parseCSV(csvContent) {
         row[h] = (values[idx] || '').trim();
       });
 
-      // Extract fields using header map
+      // Extract fields using header map with validation and logging
       const teacher = normalizeTeacher(row[headers[headerMap['Teacher']] || '']);
-      const courseCode = normalizeCourseCode(row[headers[headerMap['Course Code']] || '']);
+      let courseCode = normalizeCourseCode(row[headers[headerMap['Course Code']] || '']);
       const classTitle = normalizeText(row[headers[headerMap['Class Title']] || '']);
       const author = normalizeText(row[headers[headerMap['Author']] || '']);
       const title = normalizeText(row[headers[headerMap['Title']] || '']);
@@ -162,9 +163,15 @@ function parseCSV(csvContent) {
         notes = firstYear;
       }
 
-      // Skip rows without course code
+      // Skip rows without course code (log exact field that failed)
       if (!courseCode) {
-        errors.push({ row: rowNum, reason: 'Missing Course Code', data: { values: values.slice(0, 3) } });
+        const courseCodeField = rawHeaders[headerMap['Course Code']] || 'Course Code';
+        const rawValue = values[headerMap['Course Code']] || '';
+        errors.push({ 
+          row: rowNum, 
+          reason: `Missing Course Code (column: "${courseCodeField}", value: "${rawValue.substring(0, 50)}")`, 
+          data: { values: values.slice(0, 3) } 
+        });
         continue;
       }
 
@@ -205,7 +212,13 @@ function parseCSV(csvContent) {
         }
       }
     } catch (err) {
-      errors.push({ row: rowNum, reason: err.message || 'Parse error', data: line.substring(0, 100) });
+      // Log exact row/field that failed
+      errors.push({ 
+        row: rowNum, 
+        reason: `Parse error: ${err.message}`, 
+        data: line.substring(0, 100),
+        error: err.message 
+      });
     }
   }
 
@@ -304,7 +317,7 @@ function parseCSVLine(line) {
 }
 
 /**
- * Normalize course code (handle dots, spaces, etc.)
+ * Normalize course code (handle dots, spaces, etc.) - sanitize for DB
  */
 function normalizeCourseCode(code) {
   if (!code) return '';

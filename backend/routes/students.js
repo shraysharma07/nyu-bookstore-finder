@@ -26,7 +26,8 @@ router.post('/search', async (req, res) => {
       course: req.body?.course,
       professor: req.body?.professor
     },
-    ip: req.ip || req.connection.remoteAddress
+    ip: req.ip || req.connection.remoteAddress,
+    origin: req.headers.origin || req.headers.host
   });
 
   try {
@@ -40,155 +41,172 @@ router.post('/search', async (req, res) => {
     }
 
     // Quick check: if courses table is empty, return 503 immediately
-    const courseCountResult = await pool.query('SELECT COUNT(*) as count FROM courses LIMIT 1');
-    const courseCount = parseInt(courseCountResult.rows[0]?.count || 0);
-    if (courseCount === 0) {
-      const elapsed = Date.now() - startTime;
-      console.log(`[students/search] ${requestId} NO_DATA_503 ${elapsed}ms (courses table empty)`);
-      return res.status(503).json({ 
+    try {
+      const courseCountResult = await pool.query('SELECT COUNT(*) as count FROM courses LIMIT 1');
+      const courseCount = parseInt(courseCountResult.rows[0]?.count || 0);
+      if (courseCount === 0) {
+        const elapsed = Date.now() - startTime;
+        console.log(`[students/search] ${requestId} NO_DATA_503 ${elapsed}ms (courses table empty)`);
+        return res.status(503).json({ 
+          error: 'Service unavailable',
+          message: 'Catalog data is not available. Please try again later.' 
+        });
+      }
+    } catch (dbError) {
+      console.error(`[students/search] ${requestId} DB_CHECK_ERROR:`, dbError.message);
+      return res.status(503).json({
         error: 'Service unavailable',
-        message: 'Catalog data is not available. Please try again later.' 
+        message: 'Database connection failed. Please try again later.'
       });
     }
 
     // Wrap entire handler in timeout
     const result = await Promise.race([
       (async () => {
-        // Step 1: Get dorm ID
-        const step1Start = Date.now();
-        const dormResult = await pool.query('SELECT id FROM dorms WHERE name = $1', [dorm]);
-        const step1Time = Date.now() - step1Start;
-        console.log(`[students/search] ${requestId} STEP1: dorm lookup ${step1Time}ms`);
-        
-        if (dormResult.rows.length === 0) {
-          return res.status(400).json({ error: 'Invalid dorm name' });
-        }
-        const dormId = dormResult.rows[0].id;
+        try {
+          // Step 1: Get dorm ID
+          const step1Start = Date.now();
+          const dormResult = await pool.query('SELECT id FROM dorms WHERE name = $1', [dorm]);
+          const step1Time = Date.now() - step1Start;
+          console.log(`[students/search] ${requestId} STEP1: dorm lookup ${step1Time}ms`);
+          
+          if (dormResult.rows.length === 0) {
+            return res.status(400).json({ error: 'Invalid dorm name' });
+          }
+          const dormId = dormResult.rows[0].id;
 
-        // Step 2: Get course ID
-        const step2Start = Date.now();
-        let courseQuery = 'SELECT id FROM courses WHERE code = $1';
-        let courseParams = [course];
-        
-        if (professor) {
-          courseQuery += ' AND professor = $2';
-          courseParams.push(professor);
-        }
+          // Step 2: Get course ID
+          const step2Start = Date.now();
+          let courseQuery = 'SELECT id FROM courses WHERE code = $1';
+          let courseParams = [course];
+          
+          if (professor) {
+            courseQuery += ' AND professor = $2';
+            courseParams.push(professor);
+          }
 
-        const courseResult = await pool.query(courseQuery, courseParams);
-        const step2Time = Date.now() - step2Start;
-        console.log(`[students/search] ${requestId} STEP2: course lookup ${step2Time}ms`);
-        
-        if (courseResult.rows.length === 0) {
-          return res.status(400).json({ error: 'Invalid course or professor' });
-        }
-        const courseId = courseResult.rows[0].id;
+          const courseResult = await pool.query(courseQuery, courseParams);
+          const step2Time = Date.now() - step2Start;
+          console.log(`[students/search] ${requestId} STEP2: course lookup ${step2Time}ms`);
+          
+          if (courseResult.rows.length === 0) {
+            return res.status(400).json({ error: 'Invalid course or professor' });
+          }
+          const courseId = courseResult.rows[0].id;
 
-        // Step 3: Log the search (async, don't wait)
-        const step3Start = Date.now();
-        pool.query(
-          'INSERT INTO student_searches (student_name, dorm_id, course_id, ip_address) VALUES ($1, $2, $3, $4)',
-          [name, dormId, courseId, ipAddress]
-        ).catch(err => console.error(`[students/search] ${requestId} Log insert error:`, err.message));
-        const step3Time = Date.now() - step3Start;
-        console.log(`[students/search] ${requestId} STEP3: log search ${step3Time}ms`);
+          // Step 3: Log the search (async, don't wait)
+          const step3Start = Date.now();
+          pool.query(
+            'INSERT INTO student_searches (student_name, dorm_id, course_id, ip_address) VALUES ($1, $2, $3, $4)',
+            [name, dormId, courseId, ipAddress]
+          ).catch(err => console.error(`[students/search] ${requestId} Log insert error:`, err.message));
+          const step3Time = Date.now() - step3Start;
+          console.log(`[students/search] ${requestId} STEP3: log search ${step3Time}ms`);
 
-        // Step 4: Get books for the course (optimized)
-        const step4Start = Date.now();
-        const booksResult = await pool.query(`
-          SELECT 
-            b.id,
-            b.title,
-            b.author,
-            b.isbn,
-            s.name as subject,
-            cb.is_required
-          FROM books b
-          JOIN course_books cb ON b.id = cb.book_id
-          JOIN subjects s ON b.subject_id = s.id
-          WHERE cb.course_id = $1
-          ORDER BY cb.is_required DESC, b.title
-        `, [courseId]);
-        const step4Time = Date.now() - step4Start;
-        console.log(`[students/search] ${requestId} STEP4: books query ${step4Time}ms (${booksResult.rows.length} books)`);
-
-        // Step 5: Get bookstores with inventory in ONE optimized query (eliminates N+1)
-        const step5Start = Date.now();
-        const bookstoresResult = await pool.query(`
-          WITH bookstore_books AS (
-            SELECT DISTINCT
-              bs.id as bookstore_id,
-              bs.name,
-              bs.phone,
-              bs.address,
-              bd.walking_distance,
-              bd.distance_minutes,
-              CASE 
-                WHEN COUNT(i.id) FILTER (WHERE i.quantity > 0) > 0 THEN 'In Stock'
-                ELSE 'Limited Stock'
-              END as availability_status
-            FROM bookstores bs
-            JOIN bookstore_distances bd ON bs.id = bd.bookstore_id
-            JOIN inventory i ON bs.id = i.bookstore_id
-            JOIN books b ON i.book_id = b.id
+          // Step 4: Get books for the course (optimized)
+          const step4Start = Date.now();
+          const booksResult = await pool.query(`
+            SELECT 
+              b.id,
+              b.title,
+              b.author,
+              b.isbn,
+              s.name as subject,
+              cb.is_required
+            FROM books b
             JOIN course_books cb ON b.id = cb.book_id
-            WHERE bd.dorm_id = $1 AND cb.course_id = $2 AND i.quantity > 0
-            GROUP BY bs.id, bs.name, bs.phone, bs.address, bd.walking_distance, bd.distance_minutes
-          )
-          SELECT 
-            bb.*,
-            COALESCE(
-              JSON_AGG(
-                JSON_BUILD_OBJECT(
-                  'book_id', b.id,
-                  'title', b.title,
-                  'author', b.author,
-                  'isbn', b.isbn,
-                  'price', i.price,
-                  'quantity', i.quantity,
-                  'availability_status', i.availability_status,
-                  'is_required', cb.is_required,
-                  'subject', s.name
-                )
-                ORDER BY cb.is_required DESC, b.title
-              ) FILTER (WHERE b.id IS NOT NULL),
-              '[]'::json
-            ) as books
-          FROM bookstore_books bb
-          LEFT JOIN inventory i ON bb.bookstore_id = i.bookstore_id AND i.quantity > 0
-          LEFT JOIN books b ON i.book_id = b.id
-          LEFT JOIN subjects s ON b.subject_id = s.id
-          LEFT JOIN course_books cb ON b.id = cb.book_id AND cb.course_id = $2
-          GROUP BY bb.bookstore_id, bb.name, bb.phone, bb.address, bb.walking_distance, bb.distance_minutes, bb.availability_status
-          ORDER BY bb.distance_minutes ASC
-        `, [dormId, courseId]);
-        const step5Time = Date.now() - step5Start;
-        console.log(`[students/search] ${requestId} STEP5: bookstores query ${step5Time}ms (${bookstoresResult.rows.length} stores)`);
+            JOIN subjects s ON b.subject_id = s.id
+            WHERE cb.course_id = $1
+            ORDER BY cb.is_required DESC, b.title
+          `, [courseId]);
+          const step4Time = Date.now() - step4Start;
+          console.log(`[students/search] ${requestId} STEP4: books query ${step4Time}ms (${booksResult.rows.length} books)`);
 
-        // Transform results (books are already JSON aggregated)
-        const detailedBookstores = bookstoresResult.rows.map(store => ({
-          id: store.bookstore_id,
-          name: store.name,
-          phone: store.phone,
-          address: store.address,
-          walking_distance: store.walking_distance,
-          distance_minutes: store.distance_minutes,
-          availability_status: store.availability_status,
-          books: Array.isArray(store.books) ? store.books : []
-        }));
+          // Step 5: Get bookstores with inventory in ONE optimized query (eliminates N+1)
+          const step5Start = Date.now();
+          const bookstoresResult = await pool.query(`
+            WITH bookstore_books AS (
+              SELECT DISTINCT
+                bs.id as bookstore_id,
+                bs.name,
+                bs.phone,
+                bs.address,
+                bd.walking_distance,
+                bd.distance_minutes,
+                CASE 
+                  WHEN COUNT(i.id) FILTER (WHERE i.quantity > 0) > 0 THEN 'In Stock'
+                  ELSE 'Limited Stock'
+                END as availability_status
+              FROM bookstores bs
+              JOIN bookstore_distances bd ON bs.id = bd.bookstore_id
+              JOIN inventory i ON bs.id = i.bookstore_id
+              JOIN books b ON i.book_id = b.id
+              JOIN course_books cb ON b.id = cb.book_id
+              WHERE bd.dorm_id = $1 AND cb.course_id = $2 AND i.quantity > 0
+              GROUP BY bs.id, bs.name, bs.phone, bs.address, bd.walking_distance, bd.distance_minutes
+            )
+            SELECT 
+              bb.*,
+              COALESCE(
+                JSON_AGG(
+                  JSON_BUILD_OBJECT(
+                    'book_id', b.id,
+                    'title', b.title,
+                    'author', b.author,
+                    'isbn', b.isbn,
+                    'price', i.price,
+                    'quantity', i.quantity,
+                    'availability_status', i.availability_status,
+                    'is_required', cb.is_required,
+                    'subject', s.name
+                  )
+                  ORDER BY cb.is_required DESC, b.title
+                ) FILTER (WHERE b.id IS NOT NULL),
+                '[]'::json
+              ) as books
+            FROM bookstore_books bb
+            LEFT JOIN inventory i ON bb.bookstore_id = i.bookstore_id AND i.quantity > 0
+            LEFT JOIN books b ON i.book_id = b.id
+            LEFT JOIN subjects s ON b.subject_id = s.id
+            LEFT JOIN course_books cb ON b.id = cb.book_id AND cb.course_id = $2
+            GROUP BY bb.bookstore_id, bb.name, bb.phone, bb.address, bb.walking_distance, bb.distance_minutes, bb.availability_status
+            ORDER BY bb.distance_minutes ASC
+          `, [dormId, courseId]);
+          const step5Time = Date.now() - step5Start;
+          console.log(`[students/search] ${requestId} STEP5: bookstores query ${step5Time}ms (${bookstoresResult.rows.length} stores)`);
 
-        const totalTime = Date.now() - startTime;
-        console.log(`[students/search] ${requestId} SUCCESS ${totalTime}ms`, {
-          books: booksResult.rows.length,
-          bookstores: detailedBookstores.length
-        });
+          // Transform results (books are already JSON aggregated)
+          const detailedBookstores = bookstoresResult.rows.map(store => ({
+            id: store.bookstore_id,
+            name: store.name,
+            phone: store.phone,
+            address: store.address,
+            walking_distance: store.walking_distance,
+            distance_minutes: store.distance_minutes,
+            availability_status: store.availability_status,
+            books: Array.isArray(store.books) ? store.books : []
+          }));
 
-        return res.json({
-          success: true,
-          student: { name, dorm, course, professor },
-          requiredBooks: booksResult.rows,
-          bookstores: detailedBookstores
-        });
+          const totalTime = Date.now() - startTime;
+          console.log(`[students/search] ${requestId} SUCCESS ${totalTime}ms`, {
+            books: booksResult.rows.length,
+            bookstores: detailedBookstores.length
+          });
+
+          return res.json({
+            success: true,
+            student: { name, dorm, course, professor },
+            requiredBooks: booksResult.rows,
+            bookstores: detailedBookstores
+          });
+        } catch (stepError) {
+          console.error(`[students/search] ${requestId} STEP_ERROR:`, {
+            error: stepError.message,
+            stack: stepError.stack,
+            sqlError: stepError.code || stepError.detail || null
+          });
+          throw stepError;
+        }
       })(),
       createTimeout(TIMEOUT_MS)
     ]);
@@ -218,7 +236,10 @@ router.post('/search', async (req, res) => {
       sqlError: error.code || error.detail || null
     });
     
-    res.status(500).json({ error: 'Server error processing search' });
+    res.status(500).json({ 
+      error: 'Server error processing search',
+      message: process.env.NODE_ENV === 'production' ? 'Please try again later' : error.message
+    });
   }
 });
 

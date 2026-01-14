@@ -239,6 +239,7 @@ const HomePage = () => {
 
     try {
       const payload = {
+        name: formData.name || 'Student',
         course: courseCode,
         professor: formData.teacher || undefined,
         dorm: formData.dorm || undefined,

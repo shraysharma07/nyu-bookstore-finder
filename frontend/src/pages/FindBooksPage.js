@@ -1,16 +1,11 @@
 // frontend/src/pages/FindBooksPage.js
 // Home → Find My Books
-// Now: still uses CSV for dropdowns + online URL, but book list comes from backend /api/students/search
-// with a fallback to CSV if the backend has no matches.
+// Simplified UI: Dorm, Course Type, Course (no name/professor fields)
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import BookstoreCard from '../components/BookstoreCard';
 import { csvData } from '../course_catalogue';
 import Api from '../services/api';
-
-// mark imported component as "used" to satisfy eslint (we keep it per your request)
-void BookstoreCard;
 
 // ---- stable helpers (outside component) ----
 const parseCSVLine = (line) => {
@@ -27,42 +22,18 @@ const parseCSVLine = (line) => {
   return values;
 };
 
-const parseTeacherName = (teacherString) => {
-  if (!teacherString) return [];
-  let cleaned = teacherString.replace(/\d+$/, ''); // strip trailing numbers
-  const separators = ['/', '&', ',', ' and ', ' & '];
-  let teachers = [cleaned];
-  separators.forEach(sep => {
-    const next = [];
-    teachers.forEach(t => {
-      if (t.includes(sep)) next.push(...t.split(sep).map(s => s.trim()));
-      else next.push(t);
-    });
-    teachers = next;
-  });
-  return [...new Set(teachers.filter(Boolean))];
-};
-
 const HomePage = () => {
   const navigate = useNavigate();
 
-  // form + results state
+  // Simplified form state: only dorm, courseType, course
   const [formData, setFormData] = useState({
-    name: '',
     dorm: '',
-    classType: '',
-    teacher: '',
-    class: ''
+    courseType: '',
+    course: ''
   });
-  const [showBooks, setShowBooks] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [courseData, setCourseData] = useState([]);
-  const [teacherMapping, setTeacherMapping] = useState(new Map());
-  const booksRef = useRef(null);
-
-  // silence "setters not used" for showBooks (we navigate to /results now)
-  void setShowBooks;
 
   useEffect(() => {
     const prev = document.title;
@@ -70,10 +41,10 @@ const HomePage = () => {
     return () => { document.title = prev; };
   }, []);
 
-  // dorms stay hardcoded (these are the ones students actually recognize)
+  // dorms stay hardcoded
   const dorms = ['Select Dorm', 'Chamberi', 'Moncloa', 'Malasaña'];
 
-  // curated nearby stores by dorm — leaving exactly as you had it
+  // curated nearby stores by dorm
   const dormBookstores = {
     Chamberi: [
       { name: 'Secret Kingdoms', address: 'Calle de Moratin, 7', distance: '29 min metro', phone: '+34 633 24 30 57', availability: 'In Stock' },
@@ -95,22 +66,10 @@ const HomePage = () => {
     ]
   };
 
-  // stable callback that builds teacherMapping
-  const processTeacherNames = useCallback((data) => {
-    const mapping = new Map();
-    data.forEach(row => {
-      const people = parseTeacherName(row.Teacher);
-      people.forEach(name => {
-        if (!mapping.has(name)) mapping.set(name, []);
-        mapping.get(name).push({ ...row, IndividualTeacher: name });
-      });
-    });
-    setTeacherMapping(mapping);
-  }, []);
-
-  const parseCSVData = useCallback((csvText) => {
-    const lines = (csvText || '').trim().split('\n');
-    if (!lines.length) { setCourseData([]); setTeacherMapping(new Map()); return; }
+  // Parse CSV data on mount
+  useEffect(() => {
+    const lines = (csvData || '').trim().split('\n');
+    if (!lines.length) { setCourseData([]); return; }
 
     const headers = lines[0].split(',').map(h => h.trim());
     const data = lines.slice(1)
@@ -123,129 +82,76 @@ const HomePage = () => {
         });
         return row;
       })
-      .filter(row => row.Teacher);
+      .filter(row => row['Course Code'] && row['Course Code'].trim()); // Only rows with course codes
 
     setCourseData(data);
-    processTeacherNames(data);
-  }, [processTeacherNames]);
-
-  useEffect(() => {
-    // Always parse fresh CSV data on mount (no caching)
-    parseCSVData(csvData);
-  }, [parseCSVData]);
-
-  // Clear any cached catalog data on mount
-  useEffect(() => {
-    // Remove any old catalog cache keys if they exist
-    const cacheKeys = Object.keys(localStorage).filter(key => 
-      key.startsWith('catalog_') || key.startsWith('courses_') || key.startsWith('books_')
-    );
-    cacheKeys.forEach(key => localStorage.removeItem(key));
   }, []);
 
-  // --- dropdown helpers (unchanged logic) ---
-  const getClassTypes = () => {
+  // Get unique course types from CSV
+  const getCourseTypes = () => {
     const types = [...new Set(courseData.map(r => r['Type of Class']).filter(Boolean))];
-    return ['Select Course Type', ...types];
+    return ['Select Course Type', ...types.sort()];
   };
 
-  const getAvailableTeachers = () => {
-    if (!formData.classType || formData.classType === 'Select Course Type') return ['Select Teacher'];
-    const set = new Set();
-    Array.from(teacherMapping.entries()).forEach(([teacherName, courses]) => {
-      if (courses.some(c => c['Type of Class'] === formData.classType)) set.add(teacherName);
+  // Get courses filtered by courseType
+  const getCourses = () => {
+    if (!formData.courseType || formData.courseType === 'Select Course Type') {
+      return ['Select Course'];
+    }
+    const courses = courseData
+      .filter(row => row['Type of Class'] === formData.courseType && row['Course Code'])
+      .map(row => ({
+        code: row['Course Code'].trim(),
+        title: row['Class Title'] || row['Course Code']
+      }));
+    
+    // Deduplicate by course code
+    const uniqueCourses = [];
+    const seenCodes = new Set();
+    courses.forEach(c => {
+      if (!seenCodes.has(c.code)) {
+        seenCodes.add(c.code);
+        uniqueCourses.push(c);
+      }
     });
-    return ['Select Teacher', ...Array.from(set).sort()];
-  };
-
-  const getAvailableClasses = () => {
-    if (!formData.classType || !formData.teacher || formData.teacher === 'Select Teacher') return ['Select Class'];
-    if (!teacherMapping.has(formData.teacher)) return ['Select Class'];
-    const classes = teacherMapping
-      .get(formData.teacher)
-      .filter(c => c['Type of Class'] === formData.classType)
-      .map(c => c['Class Title'])
-      .filter(Boolean);
-    return ['Select Class', ...[...new Set(classes)].sort()];
+    
+    return ['Select Course', ...uniqueCourses.sort((a, b) => a.code.localeCompare(b.code))];
   };
 
   const handleInputChange = (field, value) => {
     setFormData(prev => {
       const next = { ...prev, [field]: value };
-      if (field === 'classType') { next.teacher = ''; next.class = ''; }
-      else if (field === 'teacher') { next.class = ''; }
+      // Reset dependent fields
+      if (field === 'courseType') {
+        next.course = '';
+      }
       return next;
     });
   };
 
-  // rows for the selected class (from CSV)
-  const getBooksForClass = () => {
-    if (!formData.teacher || !formData.class || !teacherMapping.has(formData.teacher)) return [];
-    return teacherMapping
-      .get(formData.teacher)
-      .filter(c => c['Type of Class'] === formData.classType && c['Class Title'] === formData.class);
-  };
-
-  // detect "digital" the same way (for Online card)
-  const getDigitalBooks = () => {
-    const books = getBooksForClass();
-    return books.filter(b =>
-      (b['Digital?'] && b['Digital?'].startsWith('http')) ||
-      (b['First year/Notes'] && b['First year/Notes'].startsWith('http')) ||
-      ((b.Notes || '').toLowerCase().includes('brightspace')) ||
-      ((b.Notes || '').toLowerCase().includes('brightspacce'))
-    );
-  };
-
-  // build an Online link for the class, if any — becomes a fake "store" LAST
-  const getOnlineUrlForClass = () => {
-    const digital = getDigitalBooks();
-    if (!digital.length) return null;
-    for (const b of digital) {
-      if (b['Digital?'] && b['Digital?'].startsWith('http')) return b['Digital?'];
-      if (b['First year/Notes'] && b['First year/Notes'].startsWith('http')) return b['First year/Notes'];
-    }
-    const hasBrightspaceNote = digital.some(b => (b.Notes || '').toLowerCase().includes('brightspace') || (b.Notes || '').toLowerCase().includes('brightspacce'));
-    return hasBrightspaceNote ? 'https://brightspace.nyu.edu' : null;
-  };
-
   const getBookstoresForDorm = () => dormBookstores[formData.dorm] || [];
 
-  // NEW: real search → backend, with fallback to CSV
   const handleFindBooks = async () => {
-    if (!formData.name || !formData.dorm || !formData.classType || !formData.teacher || !formData.class) {
-      alert('Please fill in all fields');
+    // Validation
+    if (!formData.dorm || !formData.courseType || !formData.course) {
+      setError('Please fill in all fields: Dorm, Course Type, and Course');
       return;
     }
 
-    const csvBooks = getBooksForClass();
-    if (!csvBooks.length) {
-      alert('No books found for this class in the seed catalog yet.');
+    if (formData.dorm === 'Select Dorm' || formData.courseType === 'Select Course Type' || formData.course === 'Select Course') {
+      setError('Please select valid values for all fields');
       return;
     }
-
-    const courseCode = (csvBooks[0]['Course Code'] || '').trim();
-    if (!courseCode) {
-      alert('No course code found for this class in the seed data.');
-      return;
-    }
-
-    const dormStores = getBookstoresForDorm();
-    const onlineUrl = getOnlineUrlForClass();
-    const isLanguage = /(^|\b)language(s)?(\b|$)/i.test((formData.classType || '').trim());
 
     setIsLoading(true);
-    setError(null); // Clear previous errors
+    setError(null);
 
     try {
-      // Send payload format that backend DEFINITELY accepts:
-      // { name, dorm, course } (name defaults to "Student" if not provided)
-      // Include professor if selected
+      // Send payload: { dorm, course, courseType }
       const payload = {
-        name: formData.name || 'Student',
         dorm: formData.dorm,
-        course: courseCode,
-        ...(formData.teacher ? { professor: formData.teacher } : {})
+        course: formData.course,
+        courseType: formData.courseType
       };
 
       console.log('[FindBooks] Calling API with payload:', payload);
@@ -253,15 +159,10 @@ const HomePage = () => {
         console.log('[FindBooks] API base URL:', process.env.REACT_APP_API_URL || 'not set (using default)');
       }
       
-      // Use Api.searchBooks which has timeout built-in (15s from apiClient)
       const json = await Api.searchBooks(payload);
       console.log('[FindBooks] backend search response:', json);
-      
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[FindBooks] Response status: OK, requiredBooks:', json.requiredBooks?.length || 0);
-      }
 
-      let finalBooks = csvBooks;
+      let finalBooks = [];
 
       // Handle response: use requiredBooks (fallback to books for backwards compatibility)
       const booksFromApi = json.requiredBooks || json.books || [];
@@ -272,18 +173,35 @@ const HomePage = () => {
           Title: b.title || '',
           Author: b.author || '',
           ISBN: b.isbn || '',
-          'Course Code': json.meta?.matchedCourseCode || courseCode,
+          'Course Code': json.meta?.matchedCourseCode || formData.course,
           'Required or Supplemental': b.is_required ? 'Required' : 'Recommended',
           Notes: ''
         }));
+      } else if (json && (json.ok || json.success) && Array.isArray(json.optionalBooks) && json.optionalBooks.length > 0) {
+        // If no required books, but optional books exist, use them
+        finalBooks = json.optionalBooks.map(b => ({
+          Title: b.title || '',
+          Author: b.author || '',
+          ISBN: b.isbn || '',
+          'Course Code': json.meta?.matchedCourseCode || formData.course,
+          'Required or Supplemental': b.is_required ? 'Required' : 'Recommended',
+          Notes: ''
+        }));
+      } else {
+        // No books found
+        setError('No books found for this course in the catalog.');
+        return;
       }
+
+      const dormStores = getBookstoresForDorm();
+      const isLanguage = /(^|\b)language(s)?(\b|$)/i.test((formData.courseType || '').trim());
 
       navigate('/results', {
         state: {
-          student: formData,   // { name, dorm, classType, teacher, class }
-          books: finalBooks,   // unified shape, from backend or CSV fallback
+          student: { dorm: formData.dorm, courseType: formData.courseType, course: formData.course },
+          books: finalBooks,
           dormStores,
-          onlineUrl,
+          onlineUrl: null, // No longer using CSV-based online URL
           isLanguage
         }
       });
@@ -292,23 +210,23 @@ const HomePage = () => {
       console.error('[FindBooks] Error details:', {
         message: err.message,
         status: err.status,
-        statusCode: err.status,
         isTimeout: err.isTimeout,
         isNetworkError: err.isNetworkError,
-        data: err.data,
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        data: err.data
       });
       
       // Set user-friendly error message
       let errorMessage = 'Something went wrong while searching. Please try again.';
       
       if (err.status === 400) {
-        errorMessage = err.data?.message || err.message || 'Invalid search parameters. Please check your input.';
-        if (err.data?.error === 'Validation error') {
-          errorMessage = err.data.message || 'Please check your input and try again.';
-        }
+        errorMessage = err.data?.message || 'Invalid search parameters. Please check your input.';
+      } else if (err.status === 404) {
+        errorMessage = err.data?.message || 'Course not found in the catalog. Please check the course code.';
       } else if (err.status === 503) {
         errorMessage = err.data?.message || 'Catalog data is not available. Please try again later.';
+        if (err.data?.message && err.data.message.includes('not been seeded')) {
+          errorMessage = 'Catalog data is not available. The database has not been seeded with course data.';
+        }
       } else if (err.status === 504) {
         errorMessage = 'Request timed out. Please try again.';
       } else if (err.isTimeout || err.message?.includes('timeout')) {
@@ -320,41 +238,13 @@ const HomePage = () => {
       }
       
       setError(errorMessage);
-      
-      // Log the API URL for debugging
-      const apiBase = process.env.REACT_APP_API_URL || 'not set (using default)';
-      console.error('[FindBooks] API base URL config:', apiBase);
     } finally {
-      // ALWAYS stop loading, even on error
       setIsLoading(false);
     }
   };
 
-  // these helpers aren’t used on this page anymore for rendering, keep them to avoid future breakage:
-  const getPhysicalBooks = () => {
-    const books = getBooksForClass();
-    return books.filter(b =>
-      !(
-        (b['Digital?'] && b['Digital?'].startsWith('http')) ||
-        (b['First year/Notes'] && b['First year/Notes'].startsWith('http')) ||
-        ((b.Notes || '').toLowerCase().includes('brightspace')) ||
-        ((b.Notes || '').toLowerCase().includes('brightspacce'))
-      ) &&
-      b.Title && b.Title.trim() !== ''
-    );
-  };
+  const courses = getCourses();
 
-  const hasNoBooks = () => {
-    const books = getBooksForClass();
-    if (!books.length) return true;
-    return books.every(b => (!b.Title || !b.Title.trim()) && (!b.Author || !b.Author.trim()));
-  };
-
-  void getPhysicalBooks;
-  void hasNoBooks;
-  void getBookstoresForDorm;
-
-  // -------------- UI ----------------
   return (
     <div>
       {/* Hero */}
@@ -379,20 +269,8 @@ const HomePage = () => {
           </div>
 
           <div className="card">
-            {/* row 1 */}
-            <div className="grid grid-2" style={{ marginBottom: '1.25rem' }}>
-              <div>
-                <label className="label" htmlFor="name">Your Name</label>
-                <input
-                  id="name"
-                  className="input"
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => handleInputChange('name', e.target.value)}
-                  placeholder="Enter your name"
-                />
-              </div>
-
+            {/* Form fields */}
+            <div className="grid grid-3" style={{ marginBottom: '1.25rem' }}>
               <div>
                 <label className="label" htmlFor="dorm">Residence Hall</label>
                 <select
@@ -400,6 +278,7 @@ const HomePage = () => {
                   className="select"
                   value={formData.dorm}
                   onChange={(e) => handleInputChange('dorm', e.target.value)}
+                  disabled={isLoading}
                 >
                   {dorms.map(dorm => (
                     <option key={dorm} value={dorm === 'Select Dorm' ? '' : dorm}>
@@ -408,19 +287,17 @@ const HomePage = () => {
                   ))}
                 </select>
               </div>
-            </div>
 
-            {/* row 2 */}
-            <div className="grid grid-3" style={{ marginBottom: '1.25rem' }}>
               <div>
-                <label className="label" htmlFor="ctype">Course Type</label>
+                <label className="label" htmlFor="courseType">Course Type</label>
                 <select
-                  id="ctype"
+                  id="courseType"
                   className="select"
-                  value={formData.classType}
-                  onChange={(e) => handleInputChange('classType', e.target.value)}
+                  value={formData.courseType}
+                  onChange={(e) => handleInputChange('courseType', e.target.value)}
+                  disabled={isLoading}
                 >
-                  {getClassTypes().map(type => (
+                  {getCourseTypes().map(type => (
                     <option key={type} value={type === 'Select Course Type' ? '' : type}>
                       {type}
                     </option>
@@ -429,46 +306,33 @@ const HomePage = () => {
               </div>
 
               <div>
-                <label className="label" htmlFor="teacher">Professor</label>
+                <label className="label" htmlFor="course">Course</label>
                 <select
-                  id="teacher"
+                  id="course"
                   className="select"
-                  value={formData.teacher}
-                  onChange={(e) => handleInputChange('teacher', e.target.value)}
-                  disabled={!formData.classType}
+                  value={formData.course}
+                  onChange={(e) => handleInputChange('course', e.target.value)}
+                  disabled={!formData.courseType || isLoading}
                 >
-                  {getAvailableTeachers().map(teacher => (
-                    <option key={teacher} value={teacher === 'Select Teacher' ? '' : teacher}>
-                      {teacher}
-                    </option>
-                  ))}
+                  {courses.map(course => {
+                    const isSelectOption = typeof course === 'string' && course === 'Select Course';
+                    const optionValue = isSelectOption ? '' : (typeof course === 'string' ? course : course.code);
+                    const optionLabel = isSelectOption ? course : (typeof course === 'string' ? course : `${course.code} - ${course.title}`);
+                    return (
+                      <option key={optionValue || 'select'} value={optionValue}>
+                        {optionLabel}
+                      </option>
+                    );
+                  })}
                 </select>
-                {!formData.classType && <div className="help">Pick a course type first</div>}
-              </div>
-
-              <div>
-                <label className="label" htmlFor="class">Class</label>
-                <select
-                  id="class"
-                  className="select"
-                  value={formData.class}
-                  onChange={(e) => handleInputChange('class', e.target.value)}
-                  disabled={!formData.teacher}
-                >
-                  {getAvailableClasses().map(cls => (
-                    <option key={cls} value={cls === 'Select Class' ? '' : cls}>
-                      {cls}
-                    </option>
-                  ))}
-                </select>
-                {!formData.teacher && <div className="help">Pick a professor first</div>}
+                {!formData.courseType && <div className="help">Pick a course type first</div>}
               </div>
             </div>
 
             <button
               className="btn btn-primary"
               onClick={handleFindBooks}
-              disabled={isLoading}
+              disabled={isLoading || !formData.dorm || !formData.courseType || !formData.course}
               style={{ width:'100%' }}
             >
               {isLoading ? 'Finding Books…' : 'Find My Books'}
@@ -512,15 +376,6 @@ const HomePage = () => {
             <div className="skeleton" style={{ width:260, height:18, margin:'0 auto 1rem' }} />
             <div className="skeleton" style={{ width:420, height:18, margin:'0 auto 2rem' }} />
             <div className="skeleton" style={{ width:60, height:60, borderRadius:'50%', margin:'0 auto' }} />
-          </div>
-        </section>
-      )}
-
-      {/* Results (kept untouched; no longer used since we navigate) */}
-      {showBooks && !isLoading && (
-        <section ref={booksRef} className="section">
-          <div className="container">
-            {/* ...leaving your original inline results intact, but navigation will be used instead */}
           </div>
         </section>
       )}

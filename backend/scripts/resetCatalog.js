@@ -4,20 +4,43 @@
 
 const fs = require('fs');
 const path = require('path');
-const { pool } = require('../db');
 const { parseCSV } = require('../utils/csvParser');
 const { importCatalog } = require('../utils/catalogImporter');
 
 async function resetCatalog() {
-  const csvPath = process.argv[2] || path.join(__dirname, '../../database/seed/course_catalog.csv');
+  // Parse command line arguments for --file
+  const args = process.argv.slice(2);
+  let csvPath = null;
   
-  if (!fs.existsSync(csvPath)) {
-    console.error(`Error: CSV file not found at ${csvPath}`);
-    process.exit(1);
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--file' && args[i + 1]) {
+      csvPath = args[i + 1];
+      break;
+    }
+  }
+  
+  // Fallback to default if not specified
+  if (!csvPath) {
+    csvPath = path.join(__dirname, '../../database/seed/course_catalog.csv');
+  }
+  
+  // Resolve path (support relative and absolute)
+  let resolvedPath = path.resolve(csvPath);
+  if (!fs.existsSync(resolvedPath)) {
+    // Try relative to repo root
+    const repoRoot = path.resolve(__dirname, '../..');
+    const altPath = path.join(repoRoot, csvPath);
+    if (fs.existsSync(altPath)) {
+      resolvedPath = altPath;
+    } else {
+      console.error(`Error: CSV file not found at ${csvPath}`);
+      console.error(`Also tried: ${altPath}`);
+      process.exit(1);
+    }
   }
 
-  console.log(`[resetCatalog] Reading CSV from ${csvPath}...`);
-  const csvContent = fs.readFileSync(csvPath, 'utf8');
+  console.log(`[resetCatalog] Reading CSV from ${resolvedPath}...`);
+  const csvContent = fs.readFileSync(resolvedPath, 'utf8');
   
   console.log(`[resetCatalog] Parsing CSV...`);
   const parsed = parseCSV(csvContent);

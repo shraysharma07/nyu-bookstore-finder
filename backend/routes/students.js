@@ -39,6 +39,18 @@ router.post('/search', async (req, res) => {
       return res.status(400).json({ error: 'Name, dorm, and course are required' });
     }
 
+    // Quick check: if courses table is empty, return 503 immediately
+    const courseCountResult = await pool.query('SELECT COUNT(*) as count FROM courses LIMIT 1');
+    const courseCount = parseInt(courseCountResult.rows[0]?.count || 0);
+    if (courseCount === 0) {
+      const elapsed = Date.now() - startTime;
+      console.log(`[students/search] ${requestId} NO_DATA_503 ${elapsed}ms (courses table empty)`);
+      return res.status(503).json({ 
+        error: 'Service unavailable',
+        message: 'Catalog data is not available. Please try again later.' 
+      });
+    }
+
     // Wrap entire handler in timeout
     const result = await Promise.race([
       (async () => {

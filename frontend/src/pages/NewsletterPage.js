@@ -28,7 +28,14 @@ export default function NewsletterPage() {
         <article style={{ border: "1px solid #e5e7eb", borderRadius: 16, padding: 16, background: "#fff" }}>
           <h3 style={{ margin: "0 0 6px 0", fontSize: 18, fontWeight: 700 }}>How updates will work</h3>
           <p style={{ margin: 0, color: "#374151" }}>
-            We’ll post improvements and new bookstore partners here. Soon this will be fetched from the backend.
+            We'll post improvements and new bookstore partners here. 
+          </p>
+        </article>
+
+        <article style={{ border: "1px solid #e5e7eb", borderRadius: 16, padding: 16, background: "#fff" }}>
+          <h3 style={{ margin: "0 0 6px 0", fontSize: 18, fontWeight: 700 }}>Secret Kingdoms Events & Activities</h3>
+          <p style={{ margin: 0, color: "#374151" }}>
+            Check out <a href="https://www.thesecretkingdoms.net/agenda/eventos.php" target="_blank" rel="noopener noreferrer" style={{ color: "#0ea5e9", textDecoration: "none", fontWeight: 600 }}>upcoming events at Secret Kingdoms Bookstore</a>
           </p>
         </article>
       </div>

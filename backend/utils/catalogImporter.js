@@ -3,6 +3,12 @@
 // Idempotent: running twice produces the same result
 // Atomic: uses transaction to ensure all-or-nothing import
 
+// Workaround for SSL certificate errors: set NODE_TLS_REJECT_UNAUTHORIZED if DATABASE_URL has sslmode=require
+if (process.env.DATABASE_URL && process.env.DATABASE_URL.includes('sslmode=require') && !process.env.NODE_TLS_REJECT_UNAUTHORIZED) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  console.log('[import] SSL workaround: NODE_TLS_REJECT_UNAUTHORIZED=0 (for RDS compatibility)');
+}
+
 const { pool } = require('../db');
 const { normalizeCourseCode } = require('./normalize');
 

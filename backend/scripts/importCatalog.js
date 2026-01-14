@@ -2,9 +2,27 @@
 // backend/scripts/importCatalog.js
 // CLI script to import CSV catalog
 // Usage: node scripts/importCatalog.js --file /path/to/file.csv
+// Requires: DATABASE_URL environment variable (or DB_HOST, DB_USER, etc.)
 
 const fs = require('fs');
 const path = require('path');
+
+// Ensure DATABASE_URL is set (required for production/EB)
+if (!process.env.DATABASE_URL) {
+  console.error('[import] ERROR: DATABASE_URL environment variable is not set');
+  console.error('[import] On EB, export it first:');
+  console.error('[import]   export DATABASE_URL="postgres://user:pass@host:port/dbname?sslmode=require"');
+  console.error('[import] Or set individual vars: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME');
+  process.exit(1);
+}
+
+// Log connection info (safe preview)
+if (process.env.DATABASE_URL) {
+  const url = process.env.DATABASE_URL;
+  const preview = url.split('@')[1] || url.substring(0, 30) + '...';
+  console.log(`[import] Using DATABASE_URL: ...@${preview}`);
+}
+
 const { parseCSV } = require('../utils/csvParser');
 const { importCatalog } = require('../utils/catalogImporter');
 

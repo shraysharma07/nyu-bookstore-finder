@@ -47,22 +47,22 @@ const HomePage = () => {
   // curated nearby stores by dorm
   const dormBookstores = {
     Chamberi: [
-      { name: 'Secret Kingdoms', address: 'Calle de Moratin, 7', distance: '29 min metro', phone: '+34 633 24 30 57', availability: 'In Stock' },
-      { name: 'Parentisis', address: 'Calle de Valencia, 30, Centro', distance: '23 min metro', phone: '+34 626 70 92 62', availability: 'In Stock' },
-      { name: 'Desperate Literature', address: 'Calle de la Cava Baja, 8', distance: '27 min metro', phone: '+34 911 88 80 89', availability: 'In Stock' },
-      { name: 'Booksellers.es', address: 'Calle de Fernández de la Hoz, 40, 28010 Madrid', distance: '10 min metro / walking', phone: '+34 914 427 959', availability: 'In Stock' }
+      { name: 'Secret Kingdoms', address: 'Calle de Moratin, 7', distance: '29 min metro', phone: '+34 633 24 30 57', availability: 'Check Website' },
+      { name: 'Parentisis', address: 'Calle de Valencia, 30, Centro', distance: '23 min metro', phone: '+34 626 70 92 62', availability: 'Email Bookstore' },
+      { name: 'Desperate Literature', address: 'Calle de la Cava Baja, 8', distance: '27 min metro', phone: '+34 911 88 80 89', availability: 'Email Bookstore' },
+      { name: 'Booksellers.es', address: 'Calle de Fernández de la Hoz, 40, 28010 Madrid', distance: '10 min metro / walking', phone: '+34 914 427 959', availability: 'Check Website' }
     ],
     Moncloa: [
-      { name: 'Secret Kingdoms', address: 'Calle de Moratin, 7', distance: '22 min metro', phone: '+34 633 24 30 57', availability: 'In Stock' },
-      { name: 'Parentisis', address: 'Calle de Valencia, 30, Centro', distance: '17 min metro', phone: '+34 626 70 92 62', availability: 'In Stock' },
-      { name: 'Desperate Literature', address: 'Calle de la Cava Baja, 8', distance: '20 min metro', phone: '+34 911 88 80 89', availability: 'In Stock' },
-      { name: 'Booksellers.es', address: 'Calle de Fernández de la Hoz, 40, 28010 Madrid', distance: '20 min metro / walking', phone: '+34 914 427 959', availability: 'In Stock' }
+      { name: 'Secret Kingdoms', address: 'Calle de Moratin, 7', distance: '29 min metro', phone: '+34 633 24 30 57', availability: 'Check Website' },
+      { name: 'Parentisis', address: 'Calle de Valencia, 30, Centro', distance: '23 min metro', phone: '+34 626 70 92 62', availability: 'Email Bookstore' },
+      { name: 'Desperate Literature', address: 'Calle de la Cava Baja, 8', distance: '27 min metro', phone: '+34 911 88 80 89', availability: 'Email Bookstore' },
+      { name: 'Booksellers.es', address: 'Calle de Fernández de la Hoz, 40, 28010 Madrid', distance: '10 min metro / walking', phone: '+34 914 427 959', availability: 'Check Website' }
     ],
     Malasaña: [
-      { name: 'Secret Kingdoms', address: 'Calle de Moratin, 7', distance: '23 min metro', phone: '+34 633 24 30 57', availability: 'In Stock' },
-      { name: 'Parentisis', address: 'Calle de Valencia, 30, Centro', distance: '19 min metro', phone: '+34 626 70 92 62', availability: 'In Stock' },
-      { name: 'Desperate Literature', address: 'Calle de la Cava Baja, 8', distance: '19 min metro', phone: '+34 911 88 80 89', availability: 'In Stock' },
-      { name: 'Booksellers.es', address: 'Calle de Fernández de la Hoz, 40, 28010 Madrid', distance: '15 min metro / walking', phone: '+34 914 427 959', availability: 'In Stock' }
+      { name: 'Secret Kingdoms', address: 'Calle de Moratin, 7', distance: '29 min metro', phone: '+34 633 24 30 57', availability: 'Check Website' },
+      { name: 'Parentisis', address: 'Calle de Valencia, 30, Centro', distance: '23 min metro', phone: '+34 626 70 92 62', availability: 'Email Bookstore' },
+      { name: 'Desperate Literature', address: 'Calle de la Cava Baja, 8', distance: '27 min metro', phone: '+34 911 88 80 89', availability: 'Email Bookstore' },
+      { name: 'Booksellers.es', address: 'Calle de Fernández de la Hoz, 40, 28010 Madrid', distance: '10 min metro / walking', phone: '+34 914 427 959', availability: 'Check Website' }
     ]
   };
 

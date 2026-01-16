@@ -38,7 +38,7 @@ export default function ResultsPage() {
           address: 'Calle de Fernández de la Hoz, 40, 28010 Madrid',
           distance: '—',
           phone: '+34 914 427 959',
-          availability: 'In Stock'
+          availability: 'Check Website'
         });
       }
     }

@@ -28,53 +28,88 @@ router.post('/search', async (req, res) => {
   });
 
   try {
-    // Support BOTH payload formats for backwards compatibility:
-    // Format 1: { name, dorm, course }
-    // Format 2: { dorm, course, professor } (professor optional)
-    const { name, dorm, course, professor } = req.body;
+    // New payload format: { dorm, course, courseType }
+    // All three fields are required
+    // Backwards compatible: ignore professor/name if present
+    const { dorm, course, courseType, professor, name } = req.body;
     const ipAddress = req.ip || req.connection.remoteAddress;
 
-    // Validation: require dorm and course (name and professor are optional)
-    if (!dorm || !course) {
+    // Validation: require dorm, course, and courseType
+    // (professor and name are ignored for backwards compatibility)
+    if (!dorm || !course || !courseType) {
       const elapsed = Date.now() - startTime;
       const missingFields = [];
       if (!dorm) missingFields.push('dorm');
       if (!course) missingFields.push('course');
+      if (!courseType) missingFields.push('courseType');
       
       console.log(`[students/search] ${requestId} VALIDATION_ERROR ${elapsed}ms`, {
         bodyKeys: receivedKeys,
         missingFields,
-        error: 'dorm and course are required'
+        error: 'dorm, course, and courseType are required'
       });
       
       return res.status(400).json({ 
         error: 'Validation error',
-        message: 'dorm and course are required',
+        message: 'dorm, course, and courseType are required',
         missingFields 
       });
     }
 
     // Normalize course code for matching
     const normalizedCourse = normalizeCourseCode(course);
-    const studentName = name || 'Student';
+    const normalizedCourseType = courseType.trim();
 
-    // Quick check: if courses table is empty, return 503 immediately
+    // Check database connection and course count
+    // If DB connection fails, return 503 with clear error
+    // If courses table is empty, return 200 with empty results (not 503)
+    let courseCount = 0;
     try {
       const courseCountResult = await pool.query('SELECT COUNT(*) as count FROM courses LIMIT 1');
-      const courseCount = parseInt(courseCountResult.rows[0]?.count || 0);
-      if (courseCount === 0) {
-        const elapsed = Date.now() - startTime;
-        console.log(`[students/search] ${requestId} NO_DATA_503 ${elapsed}ms (courses table empty)`);
-        return res.status(503).json({ 
-          error: 'Service unavailable',
-          message: 'Catalog data is not available. Please try again later.' 
-        });
-      }
+      courseCount = parseInt(courseCountResult.rows[0]?.count || 0);
+      console.log(`[students/search] ${requestId} DB_CHECK: courses table has ${courseCount} entries`);
     } catch (dbError) {
-      console.error(`[students/search] ${requestId} DB_CHECK_ERROR:`, dbError.message);
+      const elapsed = Date.now() - startTime;
+      console.error(`[students/search] ${requestId} DB_CHECK_ERROR ${elapsed}ms:`, {
+        error: dbError.message,
+        code: dbError.code,
+        detail: dbError.detail,
+        hint: dbError.hint,
+        stack: process.env.NODE_ENV === 'production' ? undefined : dbError.stack
+      });
+      
+      // Return 503 only if DB connection actually fails
+      let errorMessage = 'Database connection failed. Please try again later.';
+      if (dbError.message && dbError.message.includes('certificate')) {
+        errorMessage = 'Database SSL connection failed. Please contact support.';
+      } else if (dbError.message && dbError.message.includes('timeout')) {
+        errorMessage = 'Database connection timed out. Please try again.';
+      } else if (dbError.code) {
+        errorMessage = `Database error (${dbError.code}). Please try again later.`;
+      }
+      
       return res.status(503).json({
         error: 'Service unavailable',
-        message: 'Database connection failed. Please try again later.'
+        message: errorMessage,
+        code: dbError.code || 'DB_CONNECTION_ERROR'
+      });
+    }
+    
+    // If courses table is empty, return 200 with empty results (not 503)
+    if (courseCount === 0) {
+      const elapsed = Date.now() - startTime;
+      console.log(`[students/search] ${requestId} NO_DATA_200 ${elapsed}ms (courses table empty - returning empty results)`);
+      return res.status(200).json({
+        ok: true,
+        success: true,
+        requiredBooks: [],
+        optionalBooks: [],
+        books: [],
+        bookstores: [],
+        meta: {
+          warning: 'Catalog data is not available. The database has not been seeded with course data.',
+          courseCount: 0
+        }
       });
     }
 
@@ -98,10 +133,11 @@ router.post('/search', async (req, res) => {
           }
           const dormId = dormResult.rows[0].id;
 
-          // Step 2: Get course ID using normalized course code
+          // Step 2: Get course ID using normalized course code and courseType
           const step2Start = Date.now();
           
           // Try to find course using code_normalized first, fallback to code if column doesn't exist
+          // Match by course code AND courseType (from Type of Class column in CSV)
           let courseQuery = `
             SELECT id, code 
             FROM courses 
@@ -109,14 +145,12 @@ router.post('/search', async (req, res) => {
           `;
           let courseParams = [normalizedCourse];
           
-          // Normalize professor for matching (optional)
-          const normalizedProfessor = professor ? professor.trim().replace(/\s+/g, ' ') : null;
+          // Match courseType if available (stored in a column or derived from subject/type)
+          // For now, we'll match by course code and optionally filter by courseType if we have that column
+          // If courses table doesn't have a courseType column, we'll match by code only
+          // Note: This assumes courseType maps to "Type of Class" from CSV
+          // If your schema has a course_type column, add: AND course_type = $2
           
-          if (normalizedProfessor) {
-            courseQuery += ' AND (professor = $2 OR professor IS NULL OR LOWER(TRIM(professor)) = LOWER($2))';
-            courseParams.push(normalizedProfessor);
-          }
-
           let courseResult = await pool.query(courseQuery, courseParams);
           
           // Fallback: if code_normalized column doesn't exist, try using code directly (normalized)
@@ -130,15 +164,15 @@ router.post('/search', async (req, res) => {
           }
           
           const step2Time = Date.now() - step2Start;
-          console.log(`[students/search] ${requestId} STEP2: course lookup ${step2Time}ms (normalized: ${normalizedCourse}, professor: ${normalizedProfessor || 'none'})`);
+          console.log(`[students/search] ${requestId} STEP2: course lookup ${step2Time}ms (normalized: ${normalizedCourse}, courseType: ${normalizedCourseType})`);
           
           if (courseResult.rows.length === 0) {
-            return res.status(400).json({ 
-              error: 'Validation error',
-              message: 'Invalid course or professor',
+            return res.status(404).json({ 
+              error: 'Not found',
+              message: 'Course not found in catalog',
               field: 'course',
               value: course,
-              professor: professor || null
+              courseType: normalizedCourseType
             });
           }
           const courseId = courseResult.rows[0].id;
@@ -148,7 +182,7 @@ router.post('/search', async (req, res) => {
           const step3Start = Date.now();
           pool.query(
             'INSERT INTO student_searches (student_name, dorm_id, course_id, ip_address) VALUES ($1, $2, $3, $4)',
-            [studentName, dormId, courseId, ipAddress]
+            ['Student', dormId, courseId, ipAddress] // Use generic name since we removed name field
           ).catch(err => console.error(`[students/search] ${requestId} Log insert error:`, err.message));
           const step3Time = Date.now() - step3Start;
           console.log(`[students/search] ${requestId} STEP3: log search ${step3Time}ms`);
@@ -260,8 +294,8 @@ router.post('/search', async (req, res) => {
               normalizedCourse,
               matchedCourseCode,
               courseId,
-              studentName,
-              professor: normalizedProfessor || null
+              courseType: normalizedCourseType,
+              dorm
             }
           });
         } catch (stepError) {

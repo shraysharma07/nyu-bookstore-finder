@@ -1,0 +1,42 @@
+# Instructions to run migrations on EB instance
+
+# Step 1: SSH into EB instance
+eb ssh
+
+# Step 2: Once inside, run these commands:
+cd /var/app/current
+
+# Step 3: Create and run the migration script
+cat > /tmp/run_migrations.sh << 'SCRIPT'
+#!/bin/bash
+set -e
+
+DB_HOST="bookmap-db.c3w2600mw0bt.eu-west-1.rds.amazonaws.com"
+DB_PORT="5432"
+DB_USER="bookmap"
+DB_PASS="bookmap123"
+DB_NAME="nyu_book_finder"
+
+export PGPASSWORD="$DB_PASS"
+export PGSSLMODE="require"
+
+echo "Testing connection..."
+psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "postgres" -c "SELECT 1;" || exit 1
+
+echo "Creating database if needed..."
+psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "postgres" -c "CREATE DATABASE $DB_NAME;" 2>/dev/null || echo "Database exists"
+
+echo "Running migrations..."
+psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f backend/database-rds.sql
+psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f backend/database-migration-code-normalized.sql
+psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f backend/database-migration-varchar128.sql
+
+echo "Done! Verifying..."
+psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "SELECT COUNT(*) FROM courses;"
+SCRIPT
+
+chmod +x /tmp/run_migrations.sh
+/tmp/run_migrations.sh
+
+# Step 4: After migrations, update EB env var (from your local machine, after exiting SSH)
+# eb setenv DATABASE_URL="postgres://bookmap:bookmap123@bookmap-db.c3w2600mw0bt.eu-west-1.rds.amazonaws.com:5432/nyu_book_finder?sslmode=require"

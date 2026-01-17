@@ -3,7 +3,7 @@
 
 // Get API base URL from environment variables
 // CRA uses REACT_APP_* env vars (NOT VITE_*)
-// In production (Amplify), set REACT_APP_API_URL to your EB URL (use http:// not https://)
+// In production (Amplify), set REACT_APP_API_URL to https://api.madridbookfinder.com
 // In local dev, falls back to http://localhost:5000
 const getApiBaseUrl = () => {
   // CRA uses REACT_APP_* prefix (NOT VITE_*)
@@ -20,8 +20,8 @@ const getApiBaseUrl = () => {
     return 'http://localhost:5000/api';
   }
   
-  // Production fallback to EB URL (http:// not https://)
-  const defaultProdUrl = 'http://bookmap-api-dev.eba-2v9jbzmr.eu-west-1.elasticbeanstalk.com/api';
+  // Production fallback to custom domain (https://)
+  const defaultProdUrl = 'https://api.madridbookfinder.com/api';
   console.warn('[apiClient] No REACT_APP_API_URL configured, using default:', defaultProdUrl);
   return defaultProdUrl;
 };

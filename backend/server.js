@@ -85,13 +85,30 @@ app.get('/api/health', (_req, res) => res.status(200).json({ ok: true }));
 // ✅ EB health check endpoint
 app.get('/health', (_req, res) => res.status(200).json({ ok: true }));
 
-// ✅ verify DB on boot (non-fatal)
+// ✅ verify DB on boot (non-fatal, but log clearly)
 (async () => {
   try {
-    await pool.query('SELECT 1');
-    console.log('[db] Connected to PostgreSQL ✅');
+    const result = await pool.query('SELECT 1 as test');
+    console.log('[db] ✅ Connected to PostgreSQL successfully');
+    
+    // Check if courses table exists and has data
+    try {
+      const courseCount = await pool.query('SELECT COUNT(*) as count FROM courses');
+      const count = parseInt(courseCount.rows[0]?.count || 0);
+      if (count === 0) {
+        console.warn('[db] ⚠️  WARNING: courses table is empty. Catalog data needs to be imported.');
+      } else {
+        console.log(`[db] ✅ Catalog has ${count} courses`);
+      }
+    } catch (tableError) {
+      console.warn('[db] ⚠️  Could not check courses table:', tableError.message);
+    }
   } catch (e) {
-    console.warn('[db] Cannot reach PostgreSQL (continuing):', e.message);
+    console.error('[db] ❌ Cannot reach PostgreSQL:', e.message);
+    if (e.message && e.message.includes('certificate')) {
+      console.error('[db] ❌ SSL certificate error. Check DB_SSL_INSECURE or RDS CA bundle configuration.');
+    }
+    console.warn('[db] ⚠️  Server will continue, but database operations will fail.');
   }
 })();
 

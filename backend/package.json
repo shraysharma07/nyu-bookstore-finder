@@ -10,6 +10,7 @@
     "catalog:reset": "node scripts/resetCatalog.js",
     "smoke:prod": "node scripts/smokeTests.js",
     "smoke:full": "node scripts/comprehensiveSmokeTests.js",
+    "smoke:production": "node scripts/smokeTestProduction.js",
     "test": "jest --testTimeout=10000",
     "test:watch": "jest --watch"
   },
